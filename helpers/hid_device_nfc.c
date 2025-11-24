@@ -7,6 +7,7 @@
 #include <nfc/protocols/mf_ultralight/mf_ultralight_poller.h>
 #include <nfc/protocols/iso15693_3/iso15693_3.h>
 #include <nfc/protocols/iso15693_3/iso15693_3_poller.h>
+#include <toolbox/simple_array.h>
 
 #define TAG "HidDeviceNfc"
 
@@ -374,18 +375,63 @@ static NfcCommand hid_device_nfc_poller_callback_iso15693(NfcGenericEvent event,
                 memcpy(instance->last_data.uid, iso15_data->uid, uid_len);
                 instance->last_data.has_ndef = false;
                 instance->last_data.ndef_text[0] = '\0';
+                instance->last_data.error = HidDeviceNfcErrorNone;
 
-                // ISO15693 is Type 5 NDEF - not yet supported for NDEF parsing
-                if(instance->parse_ndef) {
-                    instance->last_data.error = HidDeviceNfcErrorUnsupportedType;
-                    FURI_LOG_I(TAG, "Got ISO15693 UID (Type 5 NDEF not supported), len: %d", instance->last_data.uid_len);
-                } else {
-                    instance->last_data.error = HidDeviceNfcErrorNone;
-                    FURI_LOG_I(TAG, "Got ISO15693 UID, len: %d", instance->last_data.uid_len);
+                FURI_LOG_I(TAG, "Got ISO15693 UID, len: %d", instance->last_data.uid_len);
+
+                // Type 5 NDEF parsing - use block data already read by poller
+                if(instance->parse_ndef && iso15_data->block_data) {
+                    FURI_LOG_D(TAG, "Attempting Type 5 NDEF parsing");
+
+                    // Get system info from the data structure
+                    uint16_t block_count = iso15_data->system_info.block_count;
+                    uint8_t block_size = iso15_data->system_info.block_size;
+
+                    FURI_LOG_D(TAG, "System info: block_count=%d, block_size=%d", block_count, block_size);
+
+                    // Check if we have block data
+                    const uint8_t* block_data = simple_array_cget_data(iso15_data->block_data);
+                    size_t block_data_size = simple_array_get_count(iso15_data->block_data);
+
+                    if(block_data && block_data_size >= 4) {
+                        FURI_LOG_D(TAG, "Block data available, size=%zu bytes", block_data_size);
+
+                        // Validate Capability Container (CC) at block 0
+                        // CC format: [Magic 0xE1][Version/Access][MLEN][Additional features]
+                        if(block_data[0] == 0xE1) {
+                            FURI_LOG_D(TAG, "Valid CC found (magic=0xE1), version=0x%02X", block_data[1]);
+
+                            // NDEF data starts after CC (4 bytes)
+                            size_t ndef_data_len = block_data_size - 4;
+
+                            // Limit to reasonable size
+                            if(ndef_data_len > 256) ndef_data_len = 256;
+
+                            size_t text_len = hid_device_nfc_parse_ndef_text(
+                                &block_data[4], // Skip 4-byte CC
+                                ndef_data_len,
+                                instance->last_data.ndef_text,
+                                HID_DEVICE_NDEF_MAX_LEN);
+
+                            if(text_len > 0) {
+                                instance->last_data.has_ndef = true;
+                                instance->last_data.error = HidDeviceNfcErrorNone;
+                                FURI_LOG_I(TAG, "Found Type 5 NDEF text: %s", instance->last_data.ndef_text);
+                            } else {
+                                // Type 5 tag with valid CC but no NDEF text record
+                                instance->last_data.error = HidDeviceNfcErrorNoTextRecord;
+                                FURI_LOG_D(TAG, "No NDEF text records found on Type 5 tag");
+                            }
+                        } else {
+                            // No valid Capability Container
+                            instance->last_data.error = HidDeviceNfcErrorNoTextRecord;
+                            FURI_LOG_D(TAG, "Invalid CC magic: 0x%02X (expected 0xE1)", block_data[0]);
+                        }
+                    } else {
+                        FURI_LOG_W(TAG, "No block data available or insufficient size");
+                        instance->last_data.error = HidDeviceNfcErrorNoTextRecord;
+                    }
                 }
-
-                // TODO: Add Type 5 NDEF parsing if parse_ndef is enabled
-                // For now, we just read the UID
 
                 instance->state = HidDeviceNfcStateSuccess;
             }
