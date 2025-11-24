@@ -4,11 +4,12 @@
 #include <input/input.h>
 #include <gui/elements.h>
 
-#define MODE_COUNT 5
+#define MODE_COUNT 6
 
 static const char* mode_names[] = {
     "NFC",
     "RFID",
+    "NDEF",
     "NFC -> RFID",
     "RFID -> NFC",
     "Pair Bluetooth",

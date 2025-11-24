@@ -15,11 +15,13 @@ This file provides guidance for developing the Contactless HID Device Flipper Ze
 ### Core Features
 1. Read RFID (125 kHz) UIDs - EM4100, HID Prox, Indala
 2. Read NFC (13.56 MHz) UIDs - ISO14443A/B, MIFARE, NTAG
-3. Parse NDEF text records from NFC tags
+3. Parse NDEF text records from NFC tags (Type 2 NDEF on MF Ultralight/NTAG tags)
 4. Output via USB HID keyboard
 5. Output via Bluetooth HID keyboard
-6. 4 scanning modes + Bluetooth pairing
-7. Configurable delimiter, Enter key append, NDEF toggle
+6. 5 scanning modes (NFC, RFID, NDEF, NFC+RFID, RFID+NFC) + Bluetooth pairing
+7. Configurable delimiter and Enter key append
+
+**Note:** NDEF mode currently supports Type 2 NDEF tags only (MIFARE Ultralight, NTAG series). Type 4 and Type 5 NDEF support can be added in the future.
 
 ### Specification Document
 Full requirements are in `contactless_hid_device.md` - reference it for all behavioral details.
@@ -95,6 +97,7 @@ ln -s "/home/work/contactless hid reader" applications_user/contactless_hid_devi
   - "FE:90:1A:B3" (show UID)
   - "Sent" (after HID output)
   - "Tag Not Present" (timeout in combo mode)
+  - "No NDEF Found" (NDEF mode with non-NDEF tag, show with red LED)
   - "Connect USB or BT HID" (no connection)
 
 ---
@@ -160,7 +163,6 @@ typedef struct {
     // Settings
     char delimiter[8];
     bool append_enter;
-    bool ndef_enabled;
 
     // UI state
     char status_text[32];
@@ -170,6 +172,7 @@ typedef struct {
 typedef enum {
     HidDeviceModeNfc,
     HidDeviceModeRfid,
+    HidDeviceModeNdef,
     HidDeviceModeNfcThenRfid,
     HidDeviceModeRfidThenNfc,
 } HidDeviceMode;
@@ -251,10 +254,11 @@ Follow this exact order to ensure incremental, testable progress:
 5. **TEST CHECKPOINT**: Formatted output displays correctly
 
 ### Phase 7: Scan Modes
-1. Implement single-tag modes (NFC only, RFID only)
+1. Implement single-tag modes (NFC only, RFID only, NDEF only)
 2. Implement combo mode state machine
 3. Implement timeout handling
-4. **TEST CHECKPOINT**: All 4 modes work correctly
+4. Implement NDEF mode error handling (red LED for non-NDEF tags)
+5. **TEST CHECKPOINT**: All 5 modes work correctly
 
 ### Phase 8: UI Polish
 1. Implement home screen with mode selector
@@ -299,8 +303,9 @@ Follow this exact order to ensure incremental, testable progress:
 - [ ] ISO14443A tag UID read correctly
 - [ ] 4-byte UID formatted correctly
 - [ ] 7-byte UID formatted correctly
-- [ ] NDEF text record parsed and appended
-- [ ] Non-NDEF tag works (UID only)
+- [ ] NDEF text record parsed correctly in NDEF mode
+- [ ] Non-NDEF tag outputs UID in NFC/combo modes
+- [ ] Non-NDEF tag shows error in NDEF mode (no output)
 - [ ] Tag removal detected
 
 #### RFID Tests
@@ -309,11 +314,13 @@ Follow this exact order to ensure incremental, testable progress:
 - [ ] Tag removal detected
 
 #### Mode Tests
-- [ ] NFC mode: scan → output → cooldown
-- [ ] RFID mode: scan → output → cooldown
-- [ ] NFC→RFID: both scanned → combined output
+- [ ] NFC mode: scan → output UID → cooldown
+- [ ] RFID mode: scan → output UID → cooldown
+- [ ] NDEF mode: scan tag with NDEF → output NDEF text only → cooldown
+- [ ] NDEF mode: scan tag without NDEF → red LED flash → timeout → no output
+- [ ] NFC→RFID: both scanned → combined UIDs output
 - [ ] NFC→RFID: timeout if second tag missing
-- [ ] RFID→NFC: both scanned → combined output
+- [ ] RFID→NFC: both scanned → combined UIDs output
 - [ ] RFID→NFC: timeout if second tag missing
 
 #### UI Tests
@@ -328,7 +335,8 @@ Follow this exact order to ensure incremental, testable progress:
 #### Edge Case Tests
 - [ ] Tag left on reader: ignored until removed
 - [ ] Rapid consecutive scans: cooldown prevents spam
-- [ ] Tag with no NDEF: works (UID only)
+- [ ] Tag with no NDEF in NFC/combo modes: works (UID only)
+- [ ] Tag with no NDEF in NDEF mode: error shown, no output
 - [ ] Very long NDEF payload: truncated gracefully
 - [ ] Settings persist across app restart
 

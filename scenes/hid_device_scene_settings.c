@@ -4,7 +4,6 @@
 enum SettingsIndex {
     SettingsIndexDelimiter,
     SettingsIndexAppendEnter,
-    SettingsIndexNdefEnabled,
 };
 
 const char* const on_off_text[2] = {
@@ -68,14 +67,6 @@ static void hid_device_scene_settings_set_append_enter(VariableItem* item) {
     app->append_enter = (index == 1);
 }
 
-static void hid_device_scene_settings_set_ndef_enabled(VariableItem* item) {
-    HidDevice* app = variable_item_get_context(item);
-    uint8_t index = variable_item_get_current_value_index(item);
-
-    variable_item_set_current_value_text(item, on_off_text[index]);
-    app->ndef_enabled = (index == 1);
-}
-
 static void hid_device_scene_settings_item_callback(void* context, uint32_t index) {
     HidDevice* app = context;
     view_dispatcher_send_custom_event(app->view_dispatcher, index);
@@ -105,16 +96,6 @@ void hid_device_scene_settings_on_enter(void* context) {
         app);
     variable_item_set_current_value_index(item, app->append_enter ? 1 : 0);
     variable_item_set_current_value_text(item, on_off_text[app->append_enter ? 1 : 0]);
-
-    // Enable NDEF toggle
-    item = variable_item_list_add(
-        app->variable_item_list,
-        "Enable NDEF:",
-        2,
-        hid_device_scene_settings_set_ndef_enabled,
-        app);
-    variable_item_set_current_value_index(item, app->ndef_enabled ? 1 : 0);
-    variable_item_set_current_value_text(item, on_off_text[app->ndef_enabled ? 1 : 0]);
 
     // Set callback for when user clicks on an item
     variable_item_list_set_enter_callback(

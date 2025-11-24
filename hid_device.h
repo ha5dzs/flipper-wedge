@@ -33,8 +33,9 @@
 
 // Scan modes
 typedef enum {
-    HidDeviceModeNfc,           // NFC only
-    HidDeviceModeRfid,          // RFID only
+    HidDeviceModeNfc,           // NFC only (UID)
+    HidDeviceModeRfid,          // RFID only (UID)
+    HidDeviceModeNdef,          // NDEF only (text records)
     HidDeviceModeNfcThenRfid,   // NFC -> RFID combo
     HidDeviceModeRfidThenNfc,   // RFID -> NFC combo
     HidDeviceModePairBluetooth, // Pair BT HID
@@ -90,7 +91,6 @@ typedef struct {
     // Settings
     char delimiter[HID_DEVICE_DELIMITER_MAX_LEN];
     bool append_enter;
-    bool ndef_enabled;
 
     // Timers
     FuriTimer* timeout_timer;

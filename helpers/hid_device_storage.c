@@ -53,8 +53,6 @@ void hid_device_save_settings(void* context) {
         fff_file, HID_DEVICE_SETTINGS_KEY_DELIMITER, app->delimiter);
     flipper_format_write_bool(
         fff_file, HID_DEVICE_SETTINGS_KEY_APPEND_ENTER, &app->append_enter, 1);
-    flipper_format_write_bool(
-        fff_file, HID_DEVICE_SETTINGS_KEY_NDEF_ENABLED, &app->ndef_enabled, 1);
 
     if(!flipper_format_rewind(fff_file)) {
         hid_device_close_config_file(fff_file);
@@ -114,8 +112,6 @@ void hid_device_read_settings(void* context) {
 
     flipper_format_read_bool(
         fff_file, HID_DEVICE_SETTINGS_KEY_APPEND_ENTER, &app->append_enter, 1);
-    flipper_format_read_bool(
-        fff_file, HID_DEVICE_SETTINGS_KEY_NDEF_ENABLED, &app->ndef_enabled, 1);
 
     flipper_format_rewind(fff_file);
 

@@ -48,7 +48,6 @@ HidDevice* hid_device_app_alloc() {
     app->scan_state = HidDeviceScanStateIdle;
     app->delimiter[0] = '\0';  // Empty delimiter by default
     app->append_enter = true;
-    app->ndef_enabled = false;  // NDEF disabled by default
 
     // Clear scanned data
     app->nfc_uid_len = 0;
