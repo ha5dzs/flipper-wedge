@@ -3,9 +3,6 @@
 
 void hid_device_led_set_rgb(void* context, int red, int green, int blue) {
     HidDevice* app = context;
-    if(app->led != 1) {
-        return;
-    }
     NotificationMessage notification_led_message_1;
     notification_led_message_1.type = NotificationMessageTypeLedRed;
     NotificationMessage notification_led_message_2;

@@ -86,12 +86,8 @@ static void hid_device_scene_startscreen_output_and_reset(HidDevice* app) {
     }
 
     // Haptic and LED feedback
-    if(app->haptic) {
-        hid_device_play_happy_bump(app);
-    }
-    if(app->led) {
-        hid_device_led_set_rgb(app, 0, 255, 0);  // Green flash
-    }
+    hid_device_play_happy_bump(app);
+    hid_device_led_set_rgb(app, 0, 255, 0);  // Green flash
 
     // Brief delay then show "Sent"
     furi_delay_ms(200);
@@ -99,9 +95,7 @@ static void hid_device_scene_startscreen_output_and_reset(HidDevice* app) {
     furi_delay_ms(200);
 
     // Reset LED
-    if(app->led) {
-        hid_device_led_reset(app);
-    }
+    hid_device_led_reset(app);
 
     // Clear scanned data
     app->nfc_uid_len = 0;
@@ -270,6 +264,13 @@ bool hid_device_scene_startscreen_on_event(void* context, SceneManagerEvent even
                 scene_manager_stop(app->scene_manager);
                 view_dispatcher_stop(app->view_dispatcher);
             }
+            consumed = true;
+            break;
+
+        case HidDeviceCustomEventOpenSettings:
+            // Stop scanning and open Settings
+            hid_device_scene_startscreen_stop_scanning(app);
+            scene_manager_next_scene(app->scene_manager, HidDeviceSceneSettings);
             consumed = true;
             break;
 

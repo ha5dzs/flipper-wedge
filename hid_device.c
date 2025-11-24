@@ -40,11 +40,7 @@ HidDevice* hid_device_app_alloc() {
         app->view_dispatcher, hid_device_custom_event_callback);
     app->submenu = submenu_alloc();
 
-    // Set defaults, in case no config loaded
-    app->haptic = 1;
-    app->speaker = 1;
-    app->led = 1;
-    app->save_settings = 1;
+    // Set defaults
     app->bt_enabled = true;
 
     // Scanning defaults
@@ -52,7 +48,7 @@ HidDevice* hid_device_app_alloc() {
     app->scan_state = HidDeviceScanStateIdle;
     app->delimiter[0] = '\0';  // Empty delimiter by default
     app->append_enter = true;
-    app->ndef_enabled = true;
+    app->ndef_enabled = false;  // NDEF disabled by default
 
     // Clear scanned data
     app->nfc_uid_len = 0;

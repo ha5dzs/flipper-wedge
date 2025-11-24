@@ -18,6 +18,9 @@ typedef enum {
 
     // Mode change
     HidDeviceCustomEventModeChange,
+
+    // Settings
+    HidDeviceCustomEventOpenSettings,
 } HidDeviceCustomEvent;
 
 enum HidDeviceCustomEventType {

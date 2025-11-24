@@ -60,10 +60,6 @@ typedef struct {
     HidDeviceStartscreen* hid_device_startscreen;
     DialogsApp* dialogs;
     FuriString* file_path;
-    uint32_t haptic;
-    uint32_t speaker;
-    uint32_t led;
-    uint32_t save_settings;
     ButtonMenu* button_menu;
     NumberInput* number_input;
     int32_t current_number;
@@ -111,23 +107,3 @@ typedef enum {
     HidDeviceViewIdNumberInput,
     HidDeviceViewIdSettings,
 } HidDeviceViewId;
-
-typedef enum {
-    HidDeviceHapticOff,
-    HidDeviceHapticOn,
-} HidDeviceHapticState;
-
-typedef enum {
-    HidDeviceSpeakerOff,
-    HidDeviceSpeakerOn,
-} HidDeviceSpeakerState;
-
-typedef enum {
-    HidDeviceLedOff,
-    HidDeviceLedOn,
-} HidDeviceLedState;
-
-typedef enum {
-    HidDeviceSettingsOff,
-    HidDeviceSettingsOn,
-} HidDeviceSettingsStoreState;

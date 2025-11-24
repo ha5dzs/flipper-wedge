@@ -2,77 +2,91 @@
 #include <lib/toolbox/value_index.h>
 
 enum SettingsIndex {
-    SettingsIndexHaptic = 10,
-    SettingsIndexValue1,
-    SettingsIndexValue2,
+    SettingsIndexDelimiter,
+    SettingsIndexAppendEnter,
+    SettingsIndexNdefEnabled,
+    SettingsIndexScanTextRecord,  // Only shown when NDEF is enabled
 };
 
-const char* const haptic_text[2] = {
+// Custom event for settings
+enum SettingsCustomEvent {
+    SettingsCustomEventScanTextRecord = 100,
+};
+
+const char* const on_off_text[2] = {
     "OFF",
     "ON",
 };
-const uint32_t haptic_value[2] = {
-    HidDeviceHapticOff,
-    HidDeviceHapticOn,
+
+// Delimiter options - display names
+const char* const delimiter_names[] = {
+    "(empty)",
+    ":",
+    "-",
+    "_",
+    "space",
+    ",",
+    ";",
+    "|",
 };
 
-const char* const speaker_text[2] = {
-    "OFF",
-    "ON",
-};
-const uint32_t speaker_value[2] = {
-    HidDeviceSpeakerOff,
-    HidDeviceSpeakerOn,
-};
-
-const char* const led_text[2] = {
-    "OFF",
-    "ON",
-};
-const uint32_t led_value[2] = {
-    HidDeviceLedOff,
-    HidDeviceLedOn,
+// Delimiter options - actual values
+const char* const delimiter_values[] = {
+    "",    // empty
+    ":",
+    "-",
+    "_",
+    " ",   // space
+    ",",
+    ";",
+    "|",
 };
 
-const char* const settings_text[2] = {
-    "OFF",
-    "ON",
-};
-const uint32_t settings_value[2] = {
-    HidDeviceSettingsOff,
-    HidDeviceSettingsOn,
-};
+#define DELIMITER_OPTIONS_COUNT 8
 
-static void hid_device_scene_settings_set_haptic(VariableItem* item) {
+// Helper function to find delimiter index
+static uint8_t get_delimiter_index(const char* delimiter) {
+    for(uint8_t i = 0; i < DELIMITER_OPTIONS_COUNT; i++) {
+        if(strcmp(delimiter, delimiter_values[i]) == 0) {
+            return i;
+        }
+    }
+    return 0; // Default to empty if not found
+}
+
+static void hid_device_scene_settings_set_delimiter(VariableItem* item) {
     HidDevice* app = variable_item_get_context(item);
     uint8_t index = variable_item_get_current_value_index(item);
 
-    variable_item_set_current_value_text(item, haptic_text[index]);
-    app->haptic = haptic_value[index];
+    // Update delimiter in app
+    strncpy(app->delimiter, delimiter_values[index], HID_DEVICE_DELIMITER_MAX_LEN - 1);
+    app->delimiter[HID_DEVICE_DELIMITER_MAX_LEN - 1] = '\0';
+
+    // Update display text
+    variable_item_set_current_value_text(item, delimiter_names[index]);
 }
 
-static void hid_device_scene_settings_set_speaker(VariableItem* item) {
+static void hid_device_scene_settings_set_append_enter(VariableItem* item) {
     HidDevice* app = variable_item_get_context(item);
     uint8_t index = variable_item_get_current_value_index(item);
-    variable_item_set_current_value_text(item, speaker_text[index]);
-    app->speaker = speaker_value[index];
+
+    variable_item_set_current_value_text(item, on_off_text[index]);
+    app->append_enter = (index == 1);
 }
 
-static void hid_device_scene_settings_set_led(VariableItem* item) {
+static void hid_device_scene_settings_set_ndef_enabled(VariableItem* item) {
     HidDevice* app = variable_item_get_context(item);
     uint8_t index = variable_item_get_current_value_index(item);
-    variable_item_set_current_value_text(item, led_text[index]);
-    app->led = led_value[index];
+
+    variable_item_set_current_value_text(item, on_off_text[index]);
+    app->ndef_enabled = (index == 1);
+
+    // Rebuild menu to show/hide "Scan Text Record" option
+    variable_item_list_reset(app->variable_item_list);
+    hid_device_scene_settings_on_enter(app);
 }
 
-static void hid_device_scene_settings_set_save_settings(VariableItem* item) {
-    HidDevice* app = variable_item_get_context(item);
-    uint8_t index = variable_item_get_current_value_index(item);
-    variable_item_set_current_value_text(item, settings_text[index]);
-    app->save_settings = settings_value[index];
-}
-
-void hid_device_scene_settings_submenu_callback(void* context, uint32_t index) {
+static void hid_device_scene_settings_item_callback(void* context, uint32_t index) {
     HidDevice* app = context;
     view_dispatcher_send_custom_event(app->view_dispatcher, index);
 }
@@ -80,49 +94,72 @@ void hid_device_scene_settings_submenu_callback(void* context, uint32_t index) {
 void hid_device_scene_settings_on_enter(void* context) {
     HidDevice* app = context;
     VariableItem* item;
-    uint8_t value_index;
 
-    // Vibro on/off
-    item = variable_item_list_add(
-        app->variable_item_list, "Vibro/Haptic:", 2, hid_device_scene_settings_set_haptic, app);
-    value_index = value_index_uint32(app->haptic, haptic_value, 2);
-    variable_item_set_current_value_index(item, value_index);
-    variable_item_set_current_value_text(item, haptic_text[value_index]);
-
-    // Sound on/off
-    item = variable_item_list_add(
-        app->variable_item_list, "Sound:", 2, hid_device_scene_settings_set_speaker, app);
-    value_index = value_index_uint32(app->speaker, speaker_value, 2);
-    variable_item_set_current_value_index(item, value_index);
-    variable_item_set_current_value_text(item, speaker_text[value_index]);
-
-    // LED Effects on/off
-    item = variable_item_list_add(
-        app->variable_item_list, "LED FX:", 2, hid_device_scene_settings_set_led, app);
-    value_index = value_index_uint32(app->led, led_value, 2);
-    variable_item_set_current_value_index(item, value_index);
-    variable_item_set_current_value_text(item, led_text[value_index]);
-
-    // Save Settings to File
+    // Delimiter selector
+    uint8_t delimiter_index = get_delimiter_index(app->delimiter);
     item = variable_item_list_add(
         app->variable_item_list,
-        "Save Settings",
-        2,
-        hid_device_scene_settings_set_save_settings,
+        "Delimiter:",
+        DELIMITER_OPTIONS_COUNT,
+        hid_device_scene_settings_set_delimiter,
         app);
-    value_index = value_index_uint32(app->save_settings, settings_value, 2);
-    variable_item_set_current_value_index(item, value_index);
-    variable_item_set_current_value_text(item, settings_text[value_index]);
+    variable_item_set_current_value_index(item, delimiter_index);
+    variable_item_set_current_value_text(item, delimiter_names[delimiter_index]);
+
+    // Append Enter toggle
+    item = variable_item_list_add(
+        app->variable_item_list,
+        "Append Enter:",
+        2,
+        hid_device_scene_settings_set_append_enter,
+        app);
+    variable_item_set_current_value_index(item, app->append_enter ? 1 : 0);
+    variable_item_set_current_value_text(item, on_off_text[app->append_enter ? 1 : 0]);
+
+    // Enable NDEF toggle
+    item = variable_item_list_add(
+        app->variable_item_list,
+        "Enable NDEF:",
+        2,
+        hid_device_scene_settings_set_ndef_enabled,
+        app);
+    variable_item_set_current_value_index(item, app->ndef_enabled ? 1 : 0);
+    variable_item_set_current_value_text(item, on_off_text[app->ndef_enabled ? 1 : 0]);
+
+    // Scan Text Record - only shown when NDEF is enabled
+    if(app->ndef_enabled) {
+        item = variable_item_list_add(app->variable_item_list, "Scan Text Record", 0, NULL, app);
+    }
+
+    // Set callback for when user clicks on an item
+    variable_item_list_set_enter_callback(
+        app->variable_item_list,
+        hid_device_scene_settings_item_callback,
+        app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, HidDeviceViewIdSettings);
 }
 
 bool hid_device_scene_settings_on_event(void* context, SceneManagerEvent event) {
     HidDevice* app = context;
-    UNUSED(app);
     bool consumed = false;
+
     if(event.type == SceneManagerEventTypeCustom) {
+        // User selected an item - determine which one
+        uint32_t selected_item =
+            variable_item_list_get_selected_item_index(app->variable_item_list);
+
+        if(app->ndef_enabled && selected_item == SettingsIndexScanTextRecord) {
+            // Scan Text Record - TODO: implement NDEF inspector scene
+            // For now, just acknowledge the selection
+            FURI_LOG_I("Settings", "Scan Text Record selected - feature coming soon");
+            consumed = true;
+        }
+    } else if(event.type == SceneManagerEventTypeBack) {
+        // Save settings when leaving
+        hid_device_save_settings(app);
     }
+
     return consumed;
 }
 

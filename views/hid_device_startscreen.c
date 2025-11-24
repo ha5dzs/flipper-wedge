@@ -75,14 +75,19 @@ void hid_device_startscreen_draw(Canvas* canvas, HidDeviceStartscreenModel* mode
         canvas_draw_str_aligned(canvas, 8, 28, AlignCenter, AlignTop, "<");
         canvas_draw_str_aligned(canvas, 120, 28, AlignCenter, AlignTop, ">");
 
-        // Bottom buttons
+        // Status and bottom buttons
         canvas_set_font(canvas, FontSecondary);
         if(connected && model->mode != HidDeviceModePairBluetooth) {
-            canvas_draw_str_aligned(canvas, 64, 52, AlignCenter, AlignTop, "Scanning...");
+            canvas_draw_str_aligned(canvas, 64, 46, AlignCenter, AlignTop, "Scanning...");
         } else if(model->mode == HidDeviceModePairBluetooth) {
             elements_button_center(canvas, "Pair");
         } else {
-            canvas_draw_str_aligned(canvas, 64, 52, AlignCenter, AlignTop, "Connect USB or BT");
+            canvas_draw_str_aligned(canvas, 64, 46, AlignCenter, AlignTop, "Connect USB or BT");
+        }
+
+        // Show Settings hint (except when in Pair BT mode which already shows button)
+        if(model->mode != HidDeviceModePairBluetooth) {
+            canvas_draw_str_aligned(canvas, 64, 56, AlignCenter, AlignTop, "[OK] Settings");
         }
     } else if(model->display_state == HidDeviceDisplayStateScanning) {
         // Scanning state
@@ -162,6 +167,9 @@ bool hid_device_startscreen_input(InputEvent* event, void* context) {
                         if(model->mode == HidDeviceModePairBluetooth) {
                             // Pair Bluetooth mode - trigger pairing
                             instance->callback(HidDeviceCustomEventStartscreenOk, instance->context);
+                        } else {
+                            // Any other mode - open Settings
+                            instance->callback(HidDeviceCustomEventOpenSettings, instance->context);
                         }
                     },
                     false);

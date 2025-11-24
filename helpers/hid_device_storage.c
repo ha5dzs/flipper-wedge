@@ -16,9 +16,6 @@ static void hid_device_close_config_file(FlipperFormat* file) {
 
 void hid_device_save_settings(void* context) {
     HidDevice* app = context;
-    if(app->save_settings == 0) {
-        return;
-    }
 
     FURI_LOG_D(TAG, "Saving Settings");
     Storage* storage = hid_device_open_storage();
@@ -52,11 +49,12 @@ void hid_device_save_settings(void* context) {
     // Store Settings
     flipper_format_write_header_cstr(
         fff_file, HID_DEVICE_SETTINGS_HEADER, HID_DEVICE_SETTINGS_FILE_VERSION);
-    flipper_format_write_uint32(fff_file, HID_DEVICE_SETTINGS_KEY_HAPTIC, &app->haptic, 1);
-    flipper_format_write_uint32(fff_file, HID_DEVICE_SETTINGS_KEY_SPEAKER, &app->speaker, 1);
-    flipper_format_write_uint32(fff_file, HID_DEVICE_SETTINGS_KEY_LED, &app->led, 1);
-    flipper_format_write_uint32(
-        fff_file, HID_DEVICE_SETTINGS_KEY_SAVE_SETTINGS, &app->save_settings, 1);
+    flipper_format_write_string_cstr(
+        fff_file, HID_DEVICE_SETTINGS_KEY_DELIMITER, app->delimiter);
+    flipper_format_write_bool(
+        fff_file, HID_DEVICE_SETTINGS_KEY_APPEND_ENTER, &app->append_enter, 1);
+    flipper_format_write_bool(
+        fff_file, HID_DEVICE_SETTINGS_KEY_NDEF_ENABLED, &app->ndef_enabled, 1);
 
     if(!flipper_format_rewind(fff_file)) {
         hid_device_close_config_file(fff_file);
@@ -107,11 +105,17 @@ void hid_device_read_settings(void* context) {
         return;
     }
 
-    flipper_format_read_uint32(fff_file, HID_DEVICE_SETTINGS_KEY_HAPTIC, &app->haptic, 1);
-    flipper_format_read_uint32(fff_file, HID_DEVICE_SETTINGS_KEY_SPEAKER, &app->speaker, 1);
-    flipper_format_read_uint32(fff_file, HID_DEVICE_SETTINGS_KEY_LED, &app->led, 1);
-    flipper_format_read_uint32(
-        fff_file, HID_DEVICE_SETTINGS_KEY_SAVE_SETTINGS, &app->save_settings, 1);
+    FuriString* delimiter_str = furi_string_alloc();
+    if(flipper_format_read_string(fff_file, HID_DEVICE_SETTINGS_KEY_DELIMITER, delimiter_str)) {
+        strncpy(app->delimiter, furi_string_get_cstr(delimiter_str), HID_DEVICE_DELIMITER_MAX_LEN - 1);
+        app->delimiter[HID_DEVICE_DELIMITER_MAX_LEN - 1] = '\0';
+    }
+    furi_string_free(delimiter_str);
+
+    flipper_format_read_bool(
+        fff_file, HID_DEVICE_SETTINGS_KEY_APPEND_ENTER, &app->append_enter, 1);
+    flipper_format_read_bool(
+        fff_file, HID_DEVICE_SETTINGS_KEY_NDEF_ENABLED, &app->ndef_enabled, 1);
 
     flipper_format_rewind(fff_file);
 
