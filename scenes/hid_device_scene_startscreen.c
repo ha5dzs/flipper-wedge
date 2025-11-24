@@ -1,0 +1,301 @@
+#include "../hid_device.h"
+#include "../helpers/hid_device_custom_event.h"
+#include "../views/hid_device_startscreen.h"
+#include "../helpers/hid_device_haptic.h"
+#include "../helpers/hid_device_led.h"
+
+// Forward declarations
+static void hid_device_scene_startscreen_start_scanning(HidDevice* app);
+static void hid_device_scene_startscreen_stop_scanning(HidDevice* app);
+
+void hid_device_scene_startscreen_callback(HidDeviceCustomEvent event, void* context) {
+    furi_assert(context);
+    HidDevice* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, event);
+}
+
+// NFC callback - called when an NFC tag is detected
+static void hid_device_scene_startscreen_nfc_callback(HidDeviceNfcData* data, void* context) {
+    furi_assert(context);
+    HidDevice* app = context;
+
+    FURI_LOG_I("HidDeviceScene", "NFC callback: uid_len=%d, has_ndef=%d", data->uid_len, data->has_ndef);
+
+    // Store the NFC data
+    app->nfc_uid_len = data->uid_len;
+    memcpy(app->nfc_uid, data->uid, data->uid_len);
+    if(data->has_ndef && app->ndef_enabled) {
+        snprintf(app->ndef_text, sizeof(app->ndef_text), "%s", data->ndef_text);
+    } else {
+        app->ndef_text[0] = '\0';
+    }
+
+    // Send event to main thread
+    FURI_LOG_D("HidDeviceScene", "NFC callback: sending custom event");
+    view_dispatcher_send_custom_event(app->view_dispatcher, HidDeviceCustomEventNfcDetected);
+}
+
+// RFID callback - called when an RFID tag is detected
+static void hid_device_scene_startscreen_rfid_callback(HidDeviceRfidData* data, void* context) {
+    furi_assert(context);
+    HidDevice* app = context;
+
+    // Store the RFID data
+    app->rfid_uid_len = data->uid_len;
+    memcpy(app->rfid_uid, data->uid, data->uid_len);
+
+    // Send event to main thread
+    view_dispatcher_send_custom_event(app->view_dispatcher, HidDeviceCustomEventRfidDetected);
+}
+
+static void hid_device_scene_startscreen_update_status(HidDevice* app) {
+    bool usb_connected = hid_device_hid_is_usb_connected(app->hid);
+    bool bt_connected = hid_device_hid_is_bt_connected(app->hid);
+    hid_device_startscreen_set_connected_status(
+        app->hid_device_startscreen, usb_connected, bt_connected);
+}
+
+static void hid_device_scene_startscreen_output_and_reset(HidDevice* app) {
+    FURI_LOG_I("HidDeviceScene", "output_and_reset: nfc_uid_len=%d, rfid_uid_len=%d", app->nfc_uid_len, app->rfid_uid_len);
+
+    // Format the output
+    bool nfc_first = (app->mode == HidDeviceModeNfc ||
+                      app->mode == HidDeviceModeNfcThenRfid);
+
+    hid_device_format_output(
+        app->nfc_uid_len > 0 ? app->nfc_uid : NULL,
+        app->nfc_uid_len,
+        app->rfid_uid_len > 0 ? app->rfid_uid : NULL,
+        app->rfid_uid_len,
+        app->ndef_text,
+        app->delimiter,
+        nfc_first,
+        app->output_buffer,
+        sizeof(app->output_buffer));
+
+    // Show the UID briefly
+    hid_device_startscreen_set_uid_text(app->hid_device_startscreen, app->output_buffer);
+    hid_device_startscreen_set_display_state(app->hid_device_startscreen, HidDeviceDisplayStateResult);
+
+    // Type the output via HID
+    if(hid_device_hid_is_connected(app->hid)) {
+        hid_device_hid_type_string(app->hid, app->output_buffer);
+        if(app->append_enter) {
+            hid_device_hid_press_enter(app->hid);
+        }
+    }
+
+    // Haptic and LED feedback
+    if(app->haptic) {
+        hid_device_play_happy_bump(app);
+    }
+    if(app->led) {
+        hid_device_led_set_rgb(app, 0, 255, 0);  // Green flash
+    }
+
+    // Brief delay then show "Sent"
+    furi_delay_ms(200);
+    hid_device_startscreen_set_display_state(app->hid_device_startscreen, HidDeviceDisplayStateSent);
+    furi_delay_ms(200);
+
+    // Reset LED
+    if(app->led) {
+        hid_device_led_reset(app);
+    }
+
+    // Clear scanned data
+    app->nfc_uid_len = 0;
+    app->rfid_uid_len = 0;
+    app->ndef_text[0] = '\0';
+
+    // Back to idle and restart scanning
+    hid_device_startscreen_set_display_state(app->hid_device_startscreen, HidDeviceDisplayStateIdle);
+    app->scan_state = HidDeviceScanStateIdle;
+
+    // Brief cooldown before restarting
+    FURI_LOG_D("HidDeviceScene", "output_and_reset: cooldown before restart");
+    furi_delay_ms(300);
+    FURI_LOG_I("HidDeviceScene", "output_and_reset: restarting scanning");
+    hid_device_scene_startscreen_start_scanning(app);
+}
+
+static void hid_device_scene_startscreen_start_scanning(HidDevice* app) {
+    // Don't scan if no HID connection or in Bluetooth pairing mode
+    if(!hid_device_hid_is_connected(app->hid)) {
+        FURI_LOG_D("HidDeviceScene", "start_scanning: no HID connection, skipping");
+        return;
+    }
+    if(app->mode == HidDeviceModePairBluetooth) {
+        FURI_LOG_D("HidDeviceScene", "start_scanning: BT pair mode, skipping");
+        return;
+    }
+
+    FURI_LOG_I("HidDeviceScene", "start_scanning: mode=%d, current scan_state=%d", app->mode, app->scan_state);
+    app->scan_state = HidDeviceScanStateScanning;
+    // Keep display in Idle state to show mode selector while scanning
+
+    // Start appropriate reader(s) based on mode
+    switch(app->mode) {
+    case HidDeviceModeNfc:
+        hid_device_nfc_set_callback(app->nfc, hid_device_scene_startscreen_nfc_callback, app);
+        hid_device_nfc_start(app->nfc, app->ndef_enabled);
+        break;
+    case HidDeviceModeRfid:
+        hid_device_rfid_set_callback(app->rfid, hid_device_scene_startscreen_rfid_callback, app);
+        hid_device_rfid_start(app->rfid);
+        break;
+    case HidDeviceModeNfcThenRfid:
+        // Start with NFC
+        hid_device_nfc_set_callback(app->nfc, hid_device_scene_startscreen_nfc_callback, app);
+        hid_device_nfc_start(app->nfc, app->ndef_enabled);
+        break;
+    case HidDeviceModeRfidThenNfc:
+        // Start with RFID
+        hid_device_rfid_set_callback(app->rfid, hid_device_scene_startscreen_rfid_callback, app);
+        hid_device_rfid_start(app->rfid);
+        break;
+    default:
+        break;
+    }
+}
+
+static void hid_device_scene_startscreen_stop_scanning(HidDevice* app) {
+    FURI_LOG_I("HidDeviceScene", "stop_scanning: current scan_state=%d", app->scan_state);
+
+    hid_device_nfc_stop(app->nfc);
+    hid_device_rfid_stop(app->rfid);
+    app->scan_state = HidDeviceScanStateIdle;
+    hid_device_startscreen_set_display_state(app->hid_device_startscreen, HidDeviceDisplayStateIdle);
+    FURI_LOG_D("HidDeviceScene", "stop_scanning: done, scan_state now Idle");
+}
+
+void hid_device_scene_startscreen_on_enter(void* context) {
+    furi_assert(context);
+    HidDevice* app = context;
+    hid_device_startscreen_set_callback(
+        app->hid_device_startscreen, hid_device_scene_startscreen_callback, app);
+
+    // Set initial mode on the view
+    hid_device_startscreen_set_mode(app->hid_device_startscreen, app->mode);
+
+    // Update HID connection status
+    hid_device_scene_startscreen_update_status(app);
+
+    view_dispatcher_switch_to_view(app->view_dispatcher, HidDeviceViewIdStartscreen);
+
+    // Start scanning if HID is connected
+    hid_device_scene_startscreen_start_scanning(app);
+}
+
+bool hid_device_scene_startscreen_on_event(void* context, SceneManagerEvent event) {
+    HidDevice* app = context;
+    bool consumed = false;
+
+    if(event.type == SceneManagerEventTypeCustom) {
+        switch(event.event) {
+        case HidDeviceCustomEventModeChange:
+            // Stop current scanning and restart with new mode
+            hid_device_scene_startscreen_stop_scanning(app);
+
+            // Get the new mode from the view (the view already updated it)
+            app->mode = hid_device_startscreen_get_mode(app->hid_device_startscreen);
+            FURI_LOG_I("HidDeviceScene", "Mode changed to: %d", app->mode);
+            hid_device_scene_startscreen_start_scanning(app);
+            consumed = true;
+            break;
+
+        case HidDeviceCustomEventNfcDetected:
+            // NFC tag detected
+            FURI_LOG_I("HidDeviceScene", "Event NfcDetected: mode=%d, scan_state=%d", app->mode, app->scan_state);
+            if(app->mode == HidDeviceModeNfc) {
+                // Single tag mode - output immediately
+                FURI_LOG_D("HidDeviceScene", "NFC single/any mode - stopping and outputting");
+                hid_device_scene_startscreen_stop_scanning(app);
+                hid_device_scene_startscreen_output_and_reset(app);
+            } else if(app->mode == HidDeviceModeNfcThenRfid) {
+                // Combo mode - now wait for RFID
+                hid_device_nfc_stop(app->nfc);
+                app->scan_state = HidDeviceScanStateWaitingSecond;
+                hid_device_startscreen_set_status_text(app->hid_device_startscreen, "Waiting for RFID...");
+                hid_device_startscreen_set_display_state(app->hid_device_startscreen, HidDeviceDisplayStateWaiting);
+
+                // Start RFID scanning
+                hid_device_rfid_set_callback(app->rfid, hid_device_scene_startscreen_rfid_callback, app);
+                hid_device_rfid_start(app->rfid);
+
+                // TODO: Add timeout timer
+            } else if(app->mode == HidDeviceModeRfidThenNfc && app->scan_state == HidDeviceScanStateWaitingSecond) {
+                // Got the second tag in combo mode
+                hid_device_nfc_stop(app->nfc);
+                hid_device_scene_startscreen_output_and_reset(app);
+            }
+            consumed = true;
+            break;
+
+        case HidDeviceCustomEventRfidDetected:
+            // RFID tag detected
+            FURI_LOG_I("HidDeviceScene", "Event RfidDetected: mode=%d, scan_state=%d", app->mode, app->scan_state);
+            if(app->mode == HidDeviceModeRfid) {
+                // Single tag mode - output immediately
+                FURI_LOG_D("HidDeviceScene", "RFID single/any mode - stopping and outputting");
+                hid_device_scene_startscreen_stop_scanning(app);
+                hid_device_scene_startscreen_output_and_reset(app);
+            } else if(app->mode == HidDeviceModeRfidThenNfc) {
+                // Combo mode - now wait for NFC
+                hid_device_rfid_stop(app->rfid);
+                app->scan_state = HidDeviceScanStateWaitingSecond;
+                hid_device_startscreen_set_status_text(app->hid_device_startscreen, "Waiting for NFC...");
+                hid_device_startscreen_set_display_state(app->hid_device_startscreen, HidDeviceDisplayStateWaiting);
+
+                // Start NFC scanning
+                hid_device_nfc_set_callback(app->nfc, hid_device_scene_startscreen_nfc_callback, app);
+                hid_device_nfc_start(app->nfc, app->ndef_enabled);
+
+                // TODO: Add timeout timer
+            } else if(app->mode == HidDeviceModeNfcThenRfid && app->scan_state == HidDeviceScanStateWaitingSecond) {
+                // Got the second tag in combo mode
+                hid_device_rfid_stop(app->rfid);
+                hid_device_scene_startscreen_output_and_reset(app);
+            }
+            consumed = true;
+            break;
+
+        case HidDeviceCustomEventStartscreenBack:
+            hid_device_scene_startscreen_stop_scanning(app);
+            notification_message(app->notification, &sequence_reset_red);
+            notification_message(app->notification, &sequence_reset_green);
+            notification_message(app->notification, &sequence_reset_blue);
+            if(!scene_manager_search_and_switch_to_previous_scene(
+                   app->scene_manager, HidDeviceSceneStartscreen)) {
+                scene_manager_stop(app->scene_manager);
+                view_dispatcher_stop(app->view_dispatcher);
+            }
+            consumed = true;
+            break;
+
+        default:
+            break;
+        }
+    } else if(event.type == SceneManagerEventTypeTick) {
+        // Update HID connection status periodically
+        hid_device_scene_startscreen_update_status(app);
+
+        // Process NFC state machine (handles scanner->poller transitions and callbacks)
+        hid_device_nfc_tick(app->nfc);
+
+        // Check if we should start/stop scanning based on HID connection
+        bool connected = hid_device_hid_is_connected(app->hid);
+        if(connected && app->scan_state == HidDeviceScanStateIdle && app->mode != HidDeviceModePairBluetooth) {
+            hid_device_scene_startscreen_start_scanning(app);
+        } else if(!connected && app->scan_state != HidDeviceScanStateIdle) {
+            hid_device_scene_startscreen_stop_scanning(app);
+        }
+    }
+
+    return consumed;
+}
+
+void hid_device_scene_startscreen_on_exit(void* context) {
+    HidDevice* app = context;
+    hid_device_scene_startscreen_stop_scanning(app);
+}

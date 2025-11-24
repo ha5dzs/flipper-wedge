@@ -1,40 +1,40 @@
-#include "hid_reader_nfc.h"
+#include "hid_device_nfc.h"
 #include <furi_hal.h>
 #include <nfc/protocols/iso14443_3a/iso14443_3a_poller.h>
 #include <nfc/protocols/iso14443_4a/iso14443_4a.h>
 #include <nfc/protocols/iso14443_4a/iso14443_4a_poller.h>
 
-#define TAG "HidReaderNfc"
+#define TAG "HidDeviceNfc"
 
 typedef enum {
-    HidReaderNfcStateIdle,
-    HidReaderNfcStateScanning,
-    HidReaderNfcStateTagDetected,  // Scanner detected tag, need to switch to poller
-    HidReaderNfcStatePolling,
-    HidReaderNfcStateSuccess,
-} HidReaderNfcState;
+    HidDeviceNfcStateIdle,
+    HidDeviceNfcStateScanning,
+    HidDeviceNfcStateTagDetected,  // Scanner detected tag, need to switch to poller
+    HidDeviceNfcStatePolling,
+    HidDeviceNfcStateSuccess,
+} HidDeviceNfcState;
 
-struct HidReaderNfc {
+struct HidDeviceNfc {
     Nfc* nfc;
     NfcScanner* scanner;
     NfcPoller* poller;
 
-    HidReaderNfcState state;
+    HidDeviceNfcState state;
     bool parse_ndef;
     NfcProtocol detected_protocol;
 
-    HidReaderNfcCallback callback;
+    HidDeviceNfcCallback callback;
     void* callback_context;
 
-    HidReaderNfcData last_data;
+    HidDeviceNfcData last_data;
 
     // Thread-safe signaling
     FuriThreadId owner_thread;
 };
 
-static NfcCommand hid_reader_nfc_poller_callback_iso14443_3a(NfcGenericEvent event, void* context) {
+static NfcCommand hid_device_nfc_poller_callback_iso14443_3a(NfcGenericEvent event, void* context) {
     furi_assert(context);
-    HidReaderNfc* instance = context;
+    HidDeviceNfc* instance = context;
 
     FURI_LOG_D(TAG, "3A callback: protocol=%d", event.protocol);
 
@@ -47,8 +47,8 @@ static NfcCommand hid_reader_nfc_poller_callback_iso14443_3a(NfcGenericEvent eve
             if(iso3a_data) {
                 // Validate UID length first
                 uint8_t uid_len = iso3a_data->uid_len;
-                if(uid_len > HID_READER_NFC_UID_MAX_LEN) {
-                    uid_len = HID_READER_NFC_UID_MAX_LEN;
+                if(uid_len > HID_DEVICE_NFC_UID_MAX_LEN) {
+                    uid_len = HID_DEVICE_NFC_UID_MAX_LEN;
                 }
                 if(uid_len > 0) {
                     instance->last_data.uid_len = uid_len;
@@ -57,7 +57,7 @@ static NfcCommand hid_reader_nfc_poller_callback_iso14443_3a(NfcGenericEvent eve
                     instance->last_data.ndef_text[0] = '\0';
 
                     FURI_LOG_I(TAG, "Got ISO14443-3A UID, len: %d", instance->last_data.uid_len);
-                    instance->state = HidReaderNfcStateSuccess;
+                    instance->state = HidDeviceNfcStateSuccess;
 
                     // Signal the owner thread that we have data
                     // The callback will be invoked from the main thread via polling
@@ -72,9 +72,9 @@ static NfcCommand hid_reader_nfc_poller_callback_iso14443_3a(NfcGenericEvent eve
     return NfcCommandContinue;
 }
 
-static NfcCommand hid_reader_nfc_poller_callback_iso14443_4a(NfcGenericEvent event, void* context) {
+static NfcCommand hid_device_nfc_poller_callback_iso14443_4a(NfcGenericEvent event, void* context) {
     furi_assert(context);
-    HidReaderNfc* instance = context;
+    HidDeviceNfc* instance = context;
 
     FURI_LOG_D(TAG, "4A callback: protocol=%d", event.protocol);
 
@@ -98,8 +98,8 @@ static NfcCommand hid_reader_nfc_poller_callback_iso14443_4a(NfcGenericEvent eve
                     uint8_t uid_len = iso3a_data->uid_len;
                     FURI_LOG_D(TAG, "UID len: %d", uid_len);
 
-                    if(uid_len > HID_READER_NFC_UID_MAX_LEN) {
-                        uid_len = HID_READER_NFC_UID_MAX_LEN;
+                    if(uid_len > HID_DEVICE_NFC_UID_MAX_LEN) {
+                        uid_len = HID_DEVICE_NFC_UID_MAX_LEN;
                     }
                     if(uid_len > 0) {
                         instance->last_data.uid_len = uid_len;
@@ -108,7 +108,7 @@ static NfcCommand hid_reader_nfc_poller_callback_iso14443_4a(NfcGenericEvent eve
                         instance->last_data.ndef_text[0] = '\0';
 
                         FURI_LOG_I(TAG, "Got ISO14443-4A UID, len: %d", instance->last_data.uid_len);
-                        instance->state = HidReaderNfcStateSuccess;
+                        instance->state = HidDeviceNfcStateSuccess;
                     }
                 } else {
                     FURI_LOG_E(TAG, "4A data has NULL 3A pointer");
@@ -128,9 +128,9 @@ static NfcCommand hid_reader_nfc_poller_callback_iso14443_4a(NfcGenericEvent eve
     return NfcCommandContinue;
 }
 
-static void hid_reader_nfc_scanner_callback(NfcScannerEvent event, void* context) {
+static void hid_device_nfc_scanner_callback(NfcScannerEvent event, void* context) {
     furi_assert(context);
-    HidReaderNfc* instance = context;
+    HidDeviceNfc* instance = context;
 
     if(event.type == NfcScannerEventTypeDetected) {
         FURI_LOG_I(TAG, "NFC tag detected, protocols: %zu", event.data.protocol_num);
@@ -179,7 +179,7 @@ static void hid_reader_nfc_scanner_callback(NfcScannerEvent event, void* context
             // Just mark that we detected a tag and store the protocol
             // The main thread will handle the scanner->poller transition
             instance->detected_protocol = protocol_to_use;
-            instance->state = HidReaderNfcStateTagDetected;
+            instance->state = HidDeviceNfcStateTagDetected;
             FURI_LOG_I(TAG, "Tag detected, protocol %d, waiting for main thread", protocol_to_use);
         } else {
             FURI_LOG_W(TAG, "No supported protocol found - cannot read UID");
@@ -188,7 +188,7 @@ static void hid_reader_nfc_scanner_callback(NfcScannerEvent event, void* context
 }
 
 // Internal function to switch from scanner to poller
-static void hid_reader_nfc_start_poller(HidReaderNfc* instance) {
+static void hid_device_nfc_start_poller(HidDeviceNfc* instance) {
     furi_assert(instance);
 
     // Stop and free scanner
@@ -201,43 +201,43 @@ static void hid_reader_nfc_start_poller(HidReaderNfc* instance) {
     // Start poller for the detected protocol
     instance->poller = nfc_poller_alloc(instance->nfc, instance->detected_protocol);
     if(instance->poller) {
-        instance->state = HidReaderNfcStatePolling;
+        instance->state = HidDeviceNfcStatePolling;
         if(instance->detected_protocol == NfcProtocolIso14443_3a) {
-            nfc_poller_start(instance->poller, hid_reader_nfc_poller_callback_iso14443_3a, instance);
+            nfc_poller_start(instance->poller, hid_device_nfc_poller_callback_iso14443_3a, instance);
         } else if(instance->detected_protocol == NfcProtocolIso14443_4a) {
-            nfc_poller_start(instance->poller, hid_reader_nfc_poller_callback_iso14443_4a, instance);
+            nfc_poller_start(instance->poller, hid_device_nfc_poller_callback_iso14443_4a, instance);
         }
         FURI_LOG_I(TAG, "Started poller for protocol %d", instance->detected_protocol);
     } else {
         FURI_LOG_E(TAG, "Failed to allocate poller");
-        instance->state = HidReaderNfcStateIdle;
+        instance->state = HidDeviceNfcStateIdle;
     }
 }
 
-HidReaderNfc* hid_reader_nfc_alloc(void) {
-    HidReaderNfc* instance = malloc(sizeof(HidReaderNfc));
+HidDeviceNfc* hid_device_nfc_alloc(void) {
+    HidDeviceNfc* instance = malloc(sizeof(HidDeviceNfc));
 
     instance->nfc = nfc_alloc();
     instance->scanner = NULL;
     instance->poller = NULL;
-    instance->state = HidReaderNfcStateIdle;
+    instance->state = HidDeviceNfcStateIdle;
     instance->parse_ndef = false;
     instance->detected_protocol = NfcProtocolInvalid;
     instance->callback = NULL;
     instance->callback_context = NULL;
     instance->owner_thread = furi_thread_get_current_id();
 
-    memset(&instance->last_data, 0, sizeof(HidReaderNfcData));
+    memset(&instance->last_data, 0, sizeof(HidDeviceNfcData));
 
     FURI_LOG_I(TAG, "NFC reader allocated");
 
     return instance;
 }
 
-void hid_reader_nfc_free(HidReaderNfc* instance) {
+void hid_device_nfc_free(HidDeviceNfc* instance) {
     furi_assert(instance);
 
-    hid_reader_nfc_stop(instance);
+    hid_device_nfc_stop(instance);
 
     if(instance->nfc) {
         nfc_free(instance->nfc);
@@ -248,22 +248,22 @@ void hid_reader_nfc_free(HidReaderNfc* instance) {
     FURI_LOG_I(TAG, "NFC reader freed");
 }
 
-void hid_reader_nfc_set_callback(
-    HidReaderNfc* instance,
-    HidReaderNfcCallback callback,
+void hid_device_nfc_set_callback(
+    HidDeviceNfc* instance,
+    HidDeviceNfcCallback callback,
     void* context) {
     furi_assert(instance);
     instance->callback = callback;
     instance->callback_context = context;
 }
 
-void hid_reader_nfc_start(HidReaderNfc* instance, bool parse_ndef) {
+void hid_device_nfc_start(HidDeviceNfc* instance, bool parse_ndef) {
     furi_assert(instance);
 
     FURI_LOG_I(TAG, "NFC start called, current state=%d, scanner=%p, poller=%p",
                instance->state, (void*)instance->scanner, (void*)instance->poller);
 
-    if(instance->state != HidReaderNfcStateIdle) {
+    if(instance->state != HidDeviceNfcStateIdle) {
         FURI_LOG_W(TAG, "Already scanning, state=%d", instance->state);
         return;
     }
@@ -284,7 +284,7 @@ void hid_reader_nfc_start(HidReaderNfc* instance, bool parse_ndef) {
 
     instance->parse_ndef = parse_ndef;
     instance->detected_protocol = NfcProtocolInvalid;
-    memset(&instance->last_data, 0, sizeof(HidReaderNfcData));
+    memset(&instance->last_data, 0, sizeof(HidDeviceNfcData));
 
     // Create and start scanner
     instance->scanner = nfc_scanner_alloc(instance->nfc);
@@ -293,13 +293,13 @@ void hid_reader_nfc_start(HidReaderNfc* instance, bool parse_ndef) {
         return;
     }
 
-    nfc_scanner_start(instance->scanner, hid_reader_nfc_scanner_callback, instance);
+    nfc_scanner_start(instance->scanner, hid_device_nfc_scanner_callback, instance);
 
-    instance->state = HidReaderNfcStateScanning;
+    instance->state = HidDeviceNfcStateScanning;
     FURI_LOG_I(TAG, "NFC scanning started (NDEF: %s), scanner=%p", parse_ndef ? "ON" : "OFF", (void*)instance->scanner);
 }
 
-void hid_reader_nfc_stop(HidReaderNfc* instance) {
+void hid_device_nfc_stop(HidDeviceNfc* instance) {
     furi_assert(instance);
 
     FURI_LOG_I(TAG, "NFC stop called, state=%d", instance->state);
@@ -319,32 +319,32 @@ void hid_reader_nfc_stop(HidReaderNfc* instance) {
     }
 
     // Reset all state
-    instance->state = HidReaderNfcStateIdle;
+    instance->state = HidDeviceNfcStateIdle;
     instance->detected_protocol = NfcProtocolInvalid;
 
     FURI_LOG_I(TAG, "NFC scanning stopped, state now Idle");
 }
 
-bool hid_reader_nfc_is_scanning(HidReaderNfc* instance) {
+bool hid_device_nfc_is_scanning(HidDeviceNfc* instance) {
     furi_assert(instance);
-    return instance->state == HidReaderNfcStateScanning ||
-           instance->state == HidReaderNfcStateTagDetected ||
-           instance->state == HidReaderNfcStatePolling;
+    return instance->state == HidDeviceNfcStateScanning ||
+           instance->state == HidDeviceNfcStateTagDetected ||
+           instance->state == HidDeviceNfcStatePolling;
 }
 
 // Call this from the main thread's tick handler to process NFC events
 // Returns true if a tag was successfully read (data available in last_data)
-bool hid_reader_nfc_tick(HidReaderNfc* instance) {
+bool hid_device_nfc_tick(HidDeviceNfc* instance) {
     furi_assert(instance);
 
-    if(instance->state == HidReaderNfcStateTagDetected) {
+    if(instance->state == HidDeviceNfcStateTagDetected) {
         // Scanner detected a tag, switch to poller (safe to do from main thread)
         FURI_LOG_I(TAG, "Tick: starting poller for detected tag, protocol=%d", instance->detected_protocol);
-        hid_reader_nfc_start_poller(instance);
+        hid_device_nfc_start_poller(instance);
         return false;
     }
 
-    if(instance->state == HidReaderNfcStateSuccess) {
+    if(instance->state == HidDeviceNfcStateSuccess) {
         // Poller got the UID, invoke callback
         FURI_LOG_I(TAG, "Tick: tag read success, UID len=%d, invoking callback", instance->last_data.uid_len);
 
@@ -358,7 +358,7 @@ bool hid_reader_nfc_tick(HidReaderNfc* instance) {
 
         // Reset state to Idle BEFORE calling callback
         // This ensures the NFC module is ready for restart
-        instance->state = HidReaderNfcStateIdle;
+        instance->state = HidDeviceNfcStateIdle;
         instance->detected_protocol = NfcProtocolInvalid;
         FURI_LOG_D(TAG, "Tick: state reset to Idle");
 

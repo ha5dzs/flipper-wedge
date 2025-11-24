@@ -1,0 +1,133 @@
+#pragma once
+
+#include <furi.h>
+#include <furi_hal.h>
+#include <gui/gui.h>
+#include <input/input.h>
+#include <stdlib.h>
+#include <dialogs/dialogs.h>
+#include <notification/notification_messages.h>
+#include <gui/view_dispatcher.h>
+#include <gui/modules/submenu.h>
+#include <gui/scene_manager.h>
+#include <gui/modules/variable_item_list.h>
+#include <gui/modules/button_menu.h>
+#include <gui/modules/number_input.h>
+#include <gui/modules/text_input.h>
+#include "scenes/hid_device_scene.h"
+#include "views/hid_device_startscreen.h"
+#include "helpers/hid_device_storage.h"
+#include "helpers/hid_device_hid.h"
+#include "helpers/hid_device_nfc.h"
+#include "helpers/hid_device_rfid.h"
+#include "helpers/hid_device_format.h"
+#include "contactless_hid_device_icons.h"
+
+#define TAG "HidDevice"
+
+#define HID_DEVICE_VERSION "1.0"
+#define HID_DEVICE_TEXT_STORE_SIZE 128
+#define HID_DEVICE_TEXT_STORE_COUNT 3
+#define HID_DEVICE_DELIMITER_MAX_LEN 8
+#define HID_DEVICE_OUTPUT_MAX_LEN 256
+
+// Scan modes
+typedef enum {
+    HidDeviceModeNfc,           // NFC only
+    HidDeviceModeRfid,          // RFID only
+    HidDeviceModeNfcThenRfid,   // NFC -> RFID combo
+    HidDeviceModeRfidThenNfc,   // RFID -> NFC combo
+    HidDeviceModePairBluetooth, // Pair BT HID
+    HidDeviceModeCount,
+} HidDeviceMode;
+
+// Scan state machine
+typedef enum {
+    HidDeviceScanStateIdle,           // Not scanning
+    HidDeviceScanStateScanning,       // Actively scanning for first tag
+    HidDeviceScanStateWaitingSecond,  // In combo mode, waiting for second tag
+    HidDeviceScanStateDisplaying,     // Showing result before "Sent"
+    HidDeviceScanStateCooldown,       // Brief pause after output
+} HidDeviceScanState;
+
+typedef struct {
+    Gui* gui;
+    NotificationApp* notification;
+    ViewDispatcher* view_dispatcher;
+    Submenu* submenu;
+    SceneManager* scene_manager;
+    VariableItemList* variable_item_list;
+    HidDeviceStartscreen* hid_device_startscreen;
+    DialogsApp* dialogs;
+    FuriString* file_path;
+    uint32_t haptic;
+    uint32_t speaker;
+    uint32_t led;
+    uint32_t save_settings;
+    ButtonMenu* button_menu;
+    NumberInput* number_input;
+    int32_t current_number;
+    TextInput* text_input;
+    char text_store[HID_DEVICE_TEXT_STORE_COUNT][HID_DEVICE_TEXT_STORE_SIZE + 1];
+
+    // HID module
+    HidDeviceHid* hid;
+    bool bt_enabled;
+
+    // NFC module
+    HidDeviceNfc* nfc;
+
+    // RFID module
+    HidDeviceRfid* rfid;
+
+    // Scan mode and state
+    HidDeviceMode mode;
+    HidDeviceScanState scan_state;
+
+    // Scanned data
+    uint8_t nfc_uid[HID_DEVICE_NFC_UID_MAX_LEN];
+    uint8_t nfc_uid_len;
+    char ndef_text[HID_DEVICE_NDEF_MAX_LEN];
+    uint8_t rfid_uid[HID_DEVICE_RFID_UID_MAX_LEN];
+    uint8_t rfid_uid_len;
+
+    // Settings
+    char delimiter[HID_DEVICE_DELIMITER_MAX_LEN];
+    bool append_enter;
+    bool ndef_enabled;
+
+    // Timers
+    FuriTimer* timeout_timer;
+    FuriTimer* display_timer;
+
+    // Output buffer
+    char output_buffer[HID_DEVICE_OUTPUT_MAX_LEN];
+} HidDevice;
+
+typedef enum {
+    HidDeviceViewIdStartscreen,
+    HidDeviceViewIdMenu,
+    HidDeviceViewIdTextInput,
+    HidDeviceViewIdNumberInput,
+    HidDeviceViewIdSettings,
+} HidDeviceViewId;
+
+typedef enum {
+    HidDeviceHapticOff,
+    HidDeviceHapticOn,
+} HidDeviceHapticState;
+
+typedef enum {
+    HidDeviceSpeakerOff,
+    HidDeviceSpeakerOn,
+} HidDeviceSpeakerState;
+
+typedef enum {
+    HidDeviceLedOff,
+    HidDeviceLedOn,
+} HidDeviceLedState;
+
+typedef enum {
+    HidDeviceSettingsOff,
+    HidDeviceSettingsOn,
+} HidDeviceSettingsStoreState;

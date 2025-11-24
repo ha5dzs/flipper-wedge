@@ -1,26 +1,26 @@
-#include "hid_reader.h"
+#include "hid_device.h"
 
-bool hid_reader_custom_event_callback(void* context, uint32_t event) {
+bool hid_device_custom_event_callback(void* context, uint32_t event) {
     furi_assert(context);
-    HidReader* app = context;
+    HidDevice* app = context;
     return scene_manager_handle_custom_event(app->scene_manager, event);
 }
 
-void hid_reader_tick_event_callback(void* context) {
+void hid_device_tick_event_callback(void* context) {
     furi_assert(context);
-    HidReader* app = context;
+    HidDevice* app = context;
     scene_manager_handle_tick_event(app->scene_manager);
 }
 
 //leave app if back button pressed
-bool hid_reader_navigation_event_callback(void* context) {
+bool hid_device_navigation_event_callback(void* context) {
     furi_assert(context);
-    HidReader* app = context;
+    HidDevice* app = context;
     return scene_manager_handle_back_event(app->scene_manager);
 }
 
-HidReader* hid_reader_app_alloc() {
-    HidReader* app = malloc(sizeof(HidReader));
+HidDevice* hid_device_app_alloc() {
+    HidDevice* app = malloc(sizeof(HidDevice));
     app->gui = furi_record_open(RECORD_GUI);
     app->notification = furi_record_open(RECORD_NOTIFICATION);
 
@@ -30,14 +30,14 @@ HidReader* hid_reader_app_alloc() {
     //Scene additions
     app->view_dispatcher = view_dispatcher_alloc();
 
-    app->scene_manager = scene_manager_alloc(&hid_reader_scene_handlers, app);
+    app->scene_manager = scene_manager_alloc(&hid_device_scene_handlers, app);
     view_dispatcher_set_event_callback_context(app->view_dispatcher, app);
     view_dispatcher_set_navigation_event_callback(
-        app->view_dispatcher, hid_reader_navigation_event_callback);
+        app->view_dispatcher, hid_device_navigation_event_callback);
     view_dispatcher_set_tick_event_callback(
-        app->view_dispatcher, hid_reader_tick_event_callback, 100);
+        app->view_dispatcher, hid_device_tick_event_callback, 100);
     view_dispatcher_set_custom_event_callback(
-        app->view_dispatcher, hid_reader_custom_event_callback);
+        app->view_dispatcher, hid_device_custom_event_callback);
     app->submenu = submenu_alloc();
 
     // Set defaults, in case no config loaded
@@ -48,8 +48,8 @@ HidReader* hid_reader_app_alloc() {
     app->bt_enabled = true;
 
     // Scanning defaults
-    app->mode = HidReaderModeNfc;  // Default: NFC only
-    app->scan_state = HidReaderScanStateIdle;
+    app->mode = HidDeviceModeNfc;  // Default: NFC only
+    app->scan_state = HidDeviceScanStateIdle;
     app->delimiter[0] = '\0';  // Empty delimiter by default
     app->append_enter = true;
     app->ndef_enabled = true;
@@ -61,15 +61,15 @@ HidReader* hid_reader_app_alloc() {
     app->output_buffer[0] = '\0';
 
     // Allocate and start HID module
-    bool usb_hid_enabled = false;  // Disabled temporarily for serial debugging
-    app->hid = hid_reader_hid_alloc();
-    hid_reader_hid_start(app->hid, usb_hid_enabled, app->bt_enabled);
+    bool usb_hid_enabled = true;  // Enable USB HID
+    app->hid = hid_device_hid_alloc();
+    hid_device_hid_start(app->hid, usb_hid_enabled, app->bt_enabled);
 
     // Allocate NFC module
-    app->nfc = hid_reader_nfc_alloc();
+    app->nfc = hid_device_nfc_alloc();
 
     // Allocate RFID module
-    app->rfid = hid_reader_rfid_alloc();
+    app->rfid = hid_device_rfid_alloc();
 
     // Timers will be created as needed
     app->timeout_timer = NULL;
@@ -81,32 +81,32 @@ HidReader* hid_reader_app_alloc() {
     app->file_path = furi_string_alloc();
 
     // Load configs
-    hid_reader_read_settings(app);
+    hid_device_read_settings(app);
 
     view_dispatcher_add_view(
-        app->view_dispatcher, HidReaderViewIdMenu, submenu_get_view(app->submenu));
-    app->hid_reader_startscreen = hid_reader_startscreen_alloc();
+        app->view_dispatcher, HidDeviceViewIdMenu, submenu_get_view(app->submenu));
+    app->hid_device_startscreen = hid_device_startscreen_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher,
-        HidReaderViewIdStartscreen,
-        hid_reader_startscreen_get_view(app->hid_reader_startscreen));
+        HidDeviceViewIdStartscreen,
+        hid_device_startscreen_get_view(app->hid_device_startscreen));
 
     app->variable_item_list = variable_item_list_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher,
-        HidReaderViewIdSettings,
+        HidDeviceViewIdSettings,
         variable_item_list_get_view(app->variable_item_list));
 
     app->text_input = text_input_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher,
-        HidReaderViewIdTextInput,
+        HidDeviceViewIdTextInput,
         text_input_get_view(app->text_input));
 
     app->number_input = number_input_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher,
-        HidReaderViewIdNumberInput,
+        HidDeviceViewIdNumberInput,
         number_input_get_view(app->number_input));
 
     //End Scene Additions
@@ -114,7 +114,7 @@ HidReader* hid_reader_app_alloc() {
     return app;
 }
 
-void hid_reader_app_free(HidReader* app) {
+void hid_device_app_free(HidDevice* app) {
     furi_assert(app);
 
     // Free timers
@@ -129,34 +129,34 @@ void hid_reader_app_free(HidReader* app) {
 
     // Free RFID module
     if(app->rfid) {
-        hid_reader_rfid_free(app->rfid);
+        hid_device_rfid_free(app->rfid);
         app->rfid = NULL;
     }
 
     // Free NFC module
     if(app->nfc) {
-        hid_reader_nfc_free(app->nfc);
+        hid_device_nfc_free(app->nfc);
         app->nfc = NULL;
     }
 
     // Free HID module
-    hid_reader_hid_free(app->hid);
+    hid_device_hid_free(app->hid);
 
     // Scene manager
     scene_manager_free(app->scene_manager);
 
     // View Dispatcher
-    view_dispatcher_remove_view(app->view_dispatcher, HidReaderViewIdMenu);
-    view_dispatcher_remove_view(app->view_dispatcher, HidReaderViewIdSettings);
-    view_dispatcher_remove_view(app->view_dispatcher, HidReaderViewIdStartscreen);
+    view_dispatcher_remove_view(app->view_dispatcher, HidDeviceViewIdMenu);
+    view_dispatcher_remove_view(app->view_dispatcher, HidDeviceViewIdSettings);
+    view_dispatcher_remove_view(app->view_dispatcher, HidDeviceViewIdStartscreen);
     submenu_free(app->submenu);
     variable_item_list_free(app->variable_item_list);
-    hid_reader_startscreen_free(app->hid_reader_startscreen);
+    hid_device_startscreen_free(app->hid_device_startscreen);
 
-    view_dispatcher_remove_view(app->view_dispatcher, HidReaderViewIdNumberInput);
+    view_dispatcher_remove_view(app->view_dispatcher, HidDeviceViewIdNumberInput);
     number_input_free(app->number_input);
 
-    view_dispatcher_remove_view(app->view_dispatcher, HidReaderViewIdTextInput);
+    view_dispatcher_remove_view(app->view_dispatcher, HidDeviceViewIdTextInput);
     text_input_free(app->text_input);
 
     view_dispatcher_free(app->view_dispatcher);
@@ -175,23 +175,23 @@ void hid_reader_app_free(HidReader* app) {
     free(app);
 }
 
-int32_t hid_reader_app(void* p) {
+int32_t hid_device_app(void* p) {
     UNUSED(p);
-    HidReader* app = hid_reader_app_alloc();
+    HidDevice* app = hid_device_app_alloc();
 
     view_dispatcher_attach_to_gui(app->view_dispatcher, app->gui, ViewDispatcherTypeFullscreen);
 
     scene_manager_next_scene(
-        app->scene_manager, HidReaderSceneStartscreen); //Start with start screen
+        app->scene_manager, HidDeviceSceneStartscreen); //Start with start screen
 
     furi_hal_power_suppress_charge_enter();
 
     view_dispatcher_run(app->view_dispatcher);
 
-    hid_reader_save_settings(app);
+    hid_device_save_settings(app);
 
     furi_hal_power_suppress_charge_exit();
-    hid_reader_app_free(app);
+    hid_device_app_free(app);
 
     return 0;
 }

@@ -1,8 +1,8 @@
-#include "hid_reader_led.h"
-#include "../hid_reader.h"
+#include "hid_device_led.h"
+#include "../hid_device.h"
 
-void hid_reader_led_set_rgb(void* context, int red, int green, int blue) {
-    HidReader* app = context;
+void hid_device_led_set_rgb(void* context, int red, int green, int blue) {
+    HidDevice* app = context;
     if(app->led != 1) {
         return;
     }
@@ -28,8 +28,8 @@ void hid_reader_led_set_rgb(void* context, int red, int green, int blue) {
         0, FuriFlagWaitAny, 10); //Delay, prevent removal from RAM before LED value set
 }
 
-void hid_reader_led_reset(void* context) {
-    HidReader* app = context;
+void hid_device_led_reset(void* context) {
+    HidDevice* app = context;
     notification_message(app->notification, &sequence_reset_red);
     notification_message(app->notification, &sequence_reset_green);
     notification_message(app->notification, &sequence_reset_blue);

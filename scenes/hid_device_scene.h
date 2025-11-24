@@ -3,27 +3,27 @@
 #include <gui/scene_manager.h>
 
 // Generate scene id and total number
-#define ADD_SCENE(prefix, name, id) HidReaderScene##id,
+#define ADD_SCENE(prefix, name, id) HidDeviceScene##id,
 typedef enum {
-#include "hid_reader_scene_config.h"
-    HidReaderSceneNum,
-} HidReaderScene;
+#include "hid_device_scene_config.h"
+    HidDeviceSceneNum,
+} HidDeviceScene;
 #undef ADD_SCENE
 
-extern const SceneManagerHandlers hid_reader_scene_handlers;
+extern const SceneManagerHandlers hid_device_scene_handlers;
 
 // Generate scene on_enter handlers declaration
 #define ADD_SCENE(prefix, name, id) void prefix##_scene_##name##_on_enter(void*);
-#include "hid_reader_scene_config.h"
+#include "hid_device_scene_config.h"
 #undef ADD_SCENE
 
 // Generate scene on_event handlers declaration
 #define ADD_SCENE(prefix, name, id) \
     bool prefix##_scene_##name##_on_event(void* context, SceneManagerEvent event);
-#include "hid_reader_scene_config.h"
+#include "hid_device_scene_config.h"
 #undef ADD_SCENE
 
 // Generate scene on_exit handlers declaration
 #define ADD_SCENE(prefix, name, id) void prefix##_scene_##name##_on_exit(void* context);
-#include "hid_reader_scene_config.h"
+#include "hid_device_scene_config.h"
 #undef ADD_SCENE

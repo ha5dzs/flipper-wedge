@@ -1,29 +1,29 @@
-#include "hid_reader_rfid.h"
+#include "hid_device_rfid.h"
 #include <lfrfid/protocols/lfrfid_protocols.h>
 
-#define TAG "HidReaderRfid"
+#define TAG "HidDeviceRfid"
 
-struct HidReaderRfid {
+struct HidDeviceRfid {
     LFRFIDWorker* worker;
     ProtocolDict* dict;
 
     bool scanning;
 
-    HidReaderRfidCallback callback;
+    HidDeviceRfidCallback callback;
     void* callback_context;
 
-    HidReaderRfidData last_data;
+    HidDeviceRfidData last_data;
 };
 
-static void hid_reader_rfid_worker_callback(LFRFIDWorkerReadResult result, ProtocolId protocol, void* context) {
+static void hid_device_rfid_worker_callback(LFRFIDWorkerReadResult result, ProtocolId protocol, void* context) {
     furi_assert(context);
-    HidReaderRfid* instance = context;
+    HidDeviceRfid* instance = context;
 
     if(result == LFRFIDWorkerReadDone) {
         // Get protocol data
         size_t data_size = protocol_dict_get_data_size(instance->dict, protocol);
-        if(data_size > HID_READER_RFID_UID_MAX_LEN) {
-            data_size = HID_READER_RFID_UID_MAX_LEN;
+        if(data_size > HID_DEVICE_RFID_UID_MAX_LEN) {
+            data_size = HID_DEVICE_RFID_UID_MAX_LEN;
         }
 
         uint8_t* data = malloc(protocol_dict_get_data_size(instance->dict, protocol));
@@ -52,8 +52,8 @@ static void hid_reader_rfid_worker_callback(LFRFIDWorkerReadResult result, Proto
     }
 }
 
-HidReaderRfid* hid_reader_rfid_alloc(void) {
-    HidReaderRfid* instance = malloc(sizeof(HidReaderRfid));
+HidDeviceRfid* hid_device_rfid_alloc(void) {
+    HidDeviceRfid* instance = malloc(sizeof(HidDeviceRfid));
 
     instance->dict = protocol_dict_alloc(lfrfid_protocols, LFRFIDProtocolMax);
     instance->worker = lfrfid_worker_alloc(instance->dict);
@@ -62,17 +62,17 @@ HidReaderRfid* hid_reader_rfid_alloc(void) {
     instance->callback = NULL;
     instance->callback_context = NULL;
 
-    memset(&instance->last_data, 0, sizeof(HidReaderRfidData));
+    memset(&instance->last_data, 0, sizeof(HidDeviceRfidData));
 
     FURI_LOG_I(TAG, "RFID reader allocated");
 
     return instance;
 }
 
-void hid_reader_rfid_free(HidReaderRfid* instance) {
+void hid_device_rfid_free(HidDeviceRfid* instance) {
     furi_assert(instance);
 
-    hid_reader_rfid_stop(instance);
+    hid_device_rfid_stop(instance);
 
     if(instance->worker) {
         lfrfid_worker_free(instance->worker);
@@ -88,16 +88,16 @@ void hid_reader_rfid_free(HidReaderRfid* instance) {
     FURI_LOG_I(TAG, "RFID reader freed");
 }
 
-void hid_reader_rfid_set_callback(
-    HidReaderRfid* instance,
-    HidReaderRfidCallback callback,
+void hid_device_rfid_set_callback(
+    HidDeviceRfid* instance,
+    HidDeviceRfidCallback callback,
     void* context) {
     furi_assert(instance);
     instance->callback = callback;
     instance->callback_context = context;
 }
 
-void hid_reader_rfid_start(HidReaderRfid* instance) {
+void hid_device_rfid_start(HidDeviceRfid* instance) {
     furi_assert(instance);
 
     if(instance->scanning) {
@@ -106,13 +106,13 @@ void hid_reader_rfid_start(HidReaderRfid* instance) {
     }
 
     lfrfid_worker_start_thread(instance->worker);
-    lfrfid_worker_read_start(instance->worker, LFRFIDWorkerReadTypeAuto, hid_reader_rfid_worker_callback, instance);
+    lfrfid_worker_read_start(instance->worker, LFRFIDWorkerReadTypeAuto, hid_device_rfid_worker_callback, instance);
 
     instance->scanning = true;
     FURI_LOG_I(TAG, "RFID scanning started");
 }
 
-void hid_reader_rfid_stop(HidReaderRfid* instance) {
+void hid_device_rfid_stop(HidDeviceRfid* instance) {
     furi_assert(instance);
 
     if(!instance->scanning) {
@@ -126,7 +126,7 @@ void hid_reader_rfid_stop(HidReaderRfid* instance) {
     FURI_LOG_I(TAG, "RFID scanning stopped");
 }
 
-bool hid_reader_rfid_is_scanning(HidReaderRfid* instance) {
+bool hid_device_rfid_is_scanning(HidDeviceRfid* instance) {
     furi_assert(instance);
     return instance->scanning;
 }

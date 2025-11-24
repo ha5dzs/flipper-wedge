@@ -1,4 +1,4 @@
-#include "../hid_reader.h"
+#include "../hid_device.h"
 #include <furi.h>
 #include <furi_hal.h>
 #include <input/input.h>
@@ -14,9 +14,9 @@ static const char* mode_names[] = {
     "Pair Bluetooth",
 };
 
-struct HidReaderStartscreen {
+struct HidDeviceStartscreen {
     View* view;
-    HidReaderStartscreenCallback callback;
+    HidDeviceStartscreenCallback callback;
     void* context;
 };
 
@@ -24,14 +24,14 @@ typedef struct {
     bool usb_connected;
     bool bt_connected;
     uint8_t mode;
-    HidReaderDisplayState display_state;
+    HidDeviceDisplayState display_state;
     char status_text[32];
     char uid_text[64];
-} HidReaderStartscreenModel;
+} HidDeviceStartscreenModel;
 
-void hid_reader_startscreen_set_callback(
-    HidReaderStartscreen* instance,
-    HidReaderStartscreenCallback callback,
+void hid_device_startscreen_set_callback(
+    HidDeviceStartscreen* instance,
+    HidDeviceStartscreenCallback callback,
     void* context) {
     furi_assert(instance);
     furi_assert(callback);
@@ -39,7 +39,7 @@ void hid_reader_startscreen_set_callback(
     instance->context = context;
 }
 
-void hid_reader_startscreen_draw(Canvas* canvas, HidReaderStartscreenModel* model) {
+void hid_device_startscreen_draw(Canvas* canvas, HidDeviceStartscreenModel* model) {
     canvas_clear(canvas);
     canvas_set_color(canvas, ColorBlack);
 
@@ -66,7 +66,7 @@ void hid_reader_startscreen_draw(Canvas* canvas, HidReaderStartscreenModel* mode
     // Mode display with arrows
     canvas_set_font(canvas, FontPrimary);
 
-    if(model->display_state == HidReaderDisplayStateIdle) {
+    if(model->display_state == HidDeviceDisplayStateIdle) {
         // Show mode selector
         const char* mode_name = mode_names[model->mode];
         canvas_draw_str_aligned(canvas, 64, 28, AlignCenter, AlignTop, mode_name);
@@ -77,66 +77,66 @@ void hid_reader_startscreen_draw(Canvas* canvas, HidReaderStartscreenModel* mode
 
         // Bottom buttons
         canvas_set_font(canvas, FontSecondary);
-        if(connected && model->mode != HidReaderModePairBluetooth) {
+        if(connected && model->mode != HidDeviceModePairBluetooth) {
             canvas_draw_str_aligned(canvas, 64, 52, AlignCenter, AlignTop, "Scanning...");
-        } else if(model->mode == HidReaderModePairBluetooth) {
+        } else if(model->mode == HidDeviceModePairBluetooth) {
             elements_button_center(canvas, "Pair");
         } else {
             canvas_draw_str_aligned(canvas, 64, 52, AlignCenter, AlignTop, "Connect USB or BT");
         }
-    } else if(model->display_state == HidReaderDisplayStateScanning) {
+    } else if(model->display_state == HidDeviceDisplayStateScanning) {
         // Scanning state
         canvas_draw_str_aligned(canvas, 64, 28, AlignCenter, AlignTop, "Scanning...");
         canvas_set_font(canvas, FontSecondary);
         canvas_draw_str_aligned(canvas, 64, 44, AlignCenter, AlignTop, model->status_text);
-    } else if(model->display_state == HidReaderDisplayStateWaiting) {
+    } else if(model->display_state == HidDeviceDisplayStateWaiting) {
         // Waiting for second tag
         canvas_draw_str_aligned(canvas, 64, 28, AlignCenter, AlignTop, "Waiting...");
         canvas_set_font(canvas, FontSecondary);
         canvas_draw_str_aligned(canvas, 64, 44, AlignCenter, AlignTop, model->status_text);
-    } else if(model->display_state == HidReaderDisplayStateResult) {
+    } else if(model->display_state == HidDeviceDisplayStateResult) {
         // Show scanned UID
         canvas_set_font(canvas, FontSecondary);
         canvas_draw_str_aligned(canvas, 64, 28, AlignCenter, AlignTop, model->uid_text);
         canvas_draw_str_aligned(canvas, 64, 44, AlignCenter, AlignTop, model->status_text);
-    } else if(model->display_state == HidReaderDisplayStateSent) {
+    } else if(model->display_state == HidDeviceDisplayStateSent) {
         // Show "Sent"
         canvas_draw_str_aligned(canvas, 64, 36, AlignCenter, AlignCenter, "Sent");
     }
 }
 
-static void hid_reader_startscreen_model_init(HidReaderStartscreenModel* const model) {
+static void hid_device_startscreen_model_init(HidDeviceStartscreenModel* const model) {
     model->usb_connected = false;
     model->bt_connected = false;
-    model->mode = HidReaderModeNfc;
-    model->display_state = HidReaderDisplayStateIdle;
+    model->mode = HidDeviceModeNfc;
+    model->display_state = HidDeviceDisplayStateIdle;
     model->status_text[0] = '\0';
     model->uid_text[0] = '\0';
 }
 
-bool hid_reader_startscreen_input(InputEvent* event, void* context) {
+bool hid_device_startscreen_input(InputEvent* event, void* context) {
     furi_assert(context);
-    HidReaderStartscreen* instance = context;
+    HidDeviceStartscreen* instance = context;
 
     if(event->type == InputTypeRelease || event->type == InputTypeRepeat) {
         switch(event->key) {
         case InputKeyBack:
             if(event->type == InputTypeRelease) {
-                instance->callback(HidReaderCustomEventStartscreenBack, instance->context);
+                instance->callback(HidDeviceCustomEventStartscreenBack, instance->context);
             }
             break;
         case InputKeyLeft:
             with_view_model(
                 instance->view,
-                HidReaderStartscreenModel * model,
+                HidDeviceStartscreenModel * model,
                 {
-                    if(model->display_state == HidReaderDisplayStateIdle) {
+                    if(model->display_state == HidDeviceDisplayStateIdle) {
                         if(model->mode == 0) {
                             model->mode = MODE_COUNT - 1;
                         } else {
                             model->mode--;
                         }
-                        instance->callback(HidReaderCustomEventModeChange, instance->context);
+                        instance->callback(HidDeviceCustomEventModeChange, instance->context);
                     }
                 },
                 true);
@@ -144,11 +144,11 @@ bool hid_reader_startscreen_input(InputEvent* event, void* context) {
         case InputKeyRight:
             with_view_model(
                 instance->view,
-                HidReaderStartscreenModel * model,
+                HidDeviceStartscreenModel * model,
                 {
-                    if(model->display_state == HidReaderDisplayStateIdle) {
+                    if(model->display_state == HidDeviceDisplayStateIdle) {
                         model->mode = (model->mode + 1) % MODE_COUNT;
-                        instance->callback(HidReaderCustomEventModeChange, instance->context);
+                        instance->callback(HidDeviceCustomEventModeChange, instance->context);
                     }
                 },
                 true);
@@ -157,11 +157,11 @@ bool hid_reader_startscreen_input(InputEvent* event, void* context) {
             if(event->type == InputTypeRelease) {
                 with_view_model(
                     instance->view,
-                    HidReaderStartscreenModel * model,
+                    HidDeviceStartscreenModel * model,
                     {
-                        if(model->mode == HidReaderModePairBluetooth) {
+                        if(model->mode == HidDeviceModePairBluetooth) {
                             // Pair Bluetooth mode - trigger pairing
-                            instance->callback(HidReaderCustomEventStartscreenOk, instance->context);
+                            instance->callback(HidDeviceCustomEventStartscreenOk, instance->context);
                         }
                     },
                     false);
@@ -176,61 +176,61 @@ bool hid_reader_startscreen_input(InputEvent* event, void* context) {
     return true;
 }
 
-void hid_reader_startscreen_exit(void* context) {
+void hid_device_startscreen_exit(void* context) {
     furi_assert(context);
 }
 
-void hid_reader_startscreen_enter(void* context) {
+void hid_device_startscreen_enter(void* context) {
     furi_assert(context);
-    HidReaderStartscreen* instance = (HidReaderStartscreen*)context;
+    HidDeviceStartscreen* instance = (HidDeviceStartscreen*)context;
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
-        { hid_reader_startscreen_model_init(model); },
+        HidDeviceStartscreenModel * model,
+        { hid_device_startscreen_model_init(model); },
         true);
 }
 
-HidReaderStartscreen* hid_reader_startscreen_alloc() {
-    HidReaderStartscreen* instance = malloc(sizeof(HidReaderStartscreen));
+HidDeviceStartscreen* hid_device_startscreen_alloc() {
+    HidDeviceStartscreen* instance = malloc(sizeof(HidDeviceStartscreen));
     instance->view = view_alloc();
-    view_allocate_model(instance->view, ViewModelTypeLocking, sizeof(HidReaderStartscreenModel));
+    view_allocate_model(instance->view, ViewModelTypeLocking, sizeof(HidDeviceStartscreenModel));
     view_set_context(instance->view, instance);
-    view_set_draw_callback(instance->view, (ViewDrawCallback)hid_reader_startscreen_draw);
-    view_set_input_callback(instance->view, hid_reader_startscreen_input);
-    view_set_enter_callback(instance->view, hid_reader_startscreen_enter);
-    view_set_exit_callback(instance->view, hid_reader_startscreen_exit);
+    view_set_draw_callback(instance->view, (ViewDrawCallback)hid_device_startscreen_draw);
+    view_set_input_callback(instance->view, hid_device_startscreen_input);
+    view_set_enter_callback(instance->view, hid_device_startscreen_enter);
+    view_set_exit_callback(instance->view, hid_device_startscreen_exit);
 
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
-        { hid_reader_startscreen_model_init(model); },
+        HidDeviceStartscreenModel * model,
+        { hid_device_startscreen_model_init(model); },
         true);
 
     return instance;
 }
 
-void hid_reader_startscreen_free(HidReaderStartscreen* instance) {
+void hid_device_startscreen_free(HidDeviceStartscreen* instance) {
     furi_assert(instance);
 
     with_view_model(
-        instance->view, HidReaderStartscreenModel * model, { UNUSED(model); }, true);
+        instance->view, HidDeviceStartscreenModel * model, { UNUSED(model); }, true);
     view_free(instance->view);
     free(instance);
 }
 
-View* hid_reader_startscreen_get_view(HidReaderStartscreen* instance) {
+View* hid_device_startscreen_get_view(HidDeviceStartscreen* instance) {
     furi_assert(instance);
     return instance->view;
 }
 
-void hid_reader_startscreen_set_connected_status(
-    HidReaderStartscreen* instance,
+void hid_device_startscreen_set_connected_status(
+    HidDeviceStartscreen* instance,
     bool usb_connected,
     bool bt_connected) {
     furi_assert(instance);
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
+        HidDeviceStartscreenModel * model,
         {
             model->usb_connected = usb_connected;
             model->bt_connected = bt_connected;
@@ -238,25 +238,25 @@ void hid_reader_startscreen_set_connected_status(
         true);
 }
 
-void hid_reader_startscreen_set_mode(
-    HidReaderStartscreen* instance,
+void hid_device_startscreen_set_mode(
+    HidDeviceStartscreen* instance,
     uint8_t mode) {
     furi_assert(instance);
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
+        HidDeviceStartscreenModel * model,
         {
             model->mode = mode;
         },
         true);
 }
 
-uint8_t hid_reader_startscreen_get_mode(HidReaderStartscreen* instance) {
+uint8_t hid_device_startscreen_get_mode(HidDeviceStartscreen* instance) {
     furi_assert(instance);
     uint8_t mode = 0;
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
+        HidDeviceStartscreenModel * model,
         {
             mode = model->mode;
         },
@@ -264,26 +264,26 @@ uint8_t hid_reader_startscreen_get_mode(HidReaderStartscreen* instance) {
     return mode;
 }
 
-void hid_reader_startscreen_set_display_state(
-    HidReaderStartscreen* instance,
-    HidReaderDisplayState state) {
+void hid_device_startscreen_set_display_state(
+    HidDeviceStartscreen* instance,
+    HidDeviceDisplayState state) {
     furi_assert(instance);
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
+        HidDeviceStartscreenModel * model,
         {
             model->display_state = state;
         },
         true);
 }
 
-void hid_reader_startscreen_set_status_text(
-    HidReaderStartscreen* instance,
+void hid_device_startscreen_set_status_text(
+    HidDeviceStartscreen* instance,
     const char* text) {
     furi_assert(instance);
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
+        HidDeviceStartscreenModel * model,
         {
             if(text) {
                 snprintf(model->status_text, sizeof(model->status_text), "%s", text);
@@ -294,13 +294,13 @@ void hid_reader_startscreen_set_status_text(
         true);
 }
 
-void hid_reader_startscreen_set_uid_text(
-    HidReaderStartscreen* instance,
+void hid_device_startscreen_set_uid_text(
+    HidDeviceStartscreen* instance,
     const char* text) {
     furi_assert(instance);
     with_view_model(
         instance->view,
-        HidReaderStartscreenModel * model,
+        HidDeviceStartscreenModel * model,
         {
             if(text) {
                 snprintf(model->uid_text, sizeof(model->uid_text), "%s", text);

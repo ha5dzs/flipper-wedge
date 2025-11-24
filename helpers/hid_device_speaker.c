@@ -1,10 +1,10 @@
-#include "hid_reader_speaker.h"
-#include "../hid_reader.h"
+#include "hid_device_speaker.h"
+#include "../hid_device.h"
 
 #define NOTE_INPUT 587.33f
 
-void hid_reader_play_input_sound(void* context) {
-    HidReader* app = context;
+void hid_device_play_input_sound(void* context) {
+    HidDevice* app = context;
     if(app->speaker != 1) {
         return;
     }
@@ -14,8 +14,8 @@ void hid_reader_play_input_sound(void* context) {
     }
 }
 
-void hid_reader_stop_all_sound(void* context) {
-    HidReader* app = context;
+void hid_device_stop_all_sound(void* context) {
+    HidDevice* app = context;
     if(app->speaker != 1) {
         return;
     }

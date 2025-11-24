@@ -2,7 +2,7 @@
 
 #include <furi.h>
 
-#define HID_READER_FORMAT_MAX_LEN 128
+#define HID_DEVICE_FORMAT_MAX_LEN 128
 
 /** Format UID bytes to hex string with delimiter
  *
@@ -12,7 +12,7 @@
  * @param output Output buffer
  * @param output_size Size of output buffer
  */
-void hid_reader_format_uid(
+void hid_device_format_uid(
     const uint8_t* uid,
     uint8_t uid_len,
     const char* delimiter,
@@ -31,7 +31,7 @@ void hid_reader_format_uid(
  * @param output Output buffer
  * @param output_size Size of output buffer
  */
-void hid_reader_format_output(
+void hid_device_format_output(
     const uint8_t* nfc_uid,
     uint8_t nfc_uid_len,
     const uint8_t* rfid_uid,

@@ -1,6 +1,6 @@
-# CLAUDE.md - Contactless HID Reader Project Guide
+# CLAUDE.md - Contactless HID Device Project Guide
 
-This file provides guidance for developing the Contactless HID Reader Flipper Zero application. Follow these guidelines to ensure a well-tested, polished final product.
+This file provides guidance for developing the Contactless HID Device Flipper Zero application. Follow these guidelines to ensure a well-tested, polished final product.
 
 ---
 
@@ -22,7 +22,7 @@ This file provides guidance for developing the Contactless HID Reader Flipper Ze
 7. Configurable delimiter, Enter key append, NDEF toggle
 
 ### Specification Document
-Full requirements are in `contactless_hid_reader.md` - reference it for all behavioral details.
+Full requirements are in `contactless_hid_device.md` - reference it for all behavioral details.
 
 ---
 
@@ -36,22 +36,22 @@ git clone --recursive https://github.com/flipperdevices/flipperzero-firmware.git
 cd flipperzero-firmware
 
 # Create symlink for our app
-ln -s "/home/work/contactless hid reader" applications_user/contactless_hid_reader
+ln -s "/home/work/contactless hid reader" applications_user/contactless_hid_device
 
 # First build will download Docker image and toolchain
-./fbt fap_contactless_hid_reader
+./fbt fap_contactless_hid_device
 ```
 
 ### Build Commands
 ```bash
 # Build the app
-./fbt fap_contactless_hid_reader
+./fbt fap_contactless_hid_device
 
 # Build and deploy to connected Flipper via USB
-./fbt launch APPSRC=applications_user/contactless_hid_reader
+./fbt launch APPSRC=applications_user/contactless_hid_device
 
 # Clean build
-./fbt -c fap_contactless_hid_reader
+./fbt -c fap_contactless_hid_device
 ```
 
 ### Build Verification Checkpoints
@@ -102,27 +102,27 @@ ln -s "/home/work/contactless hid reader" applications_user/contactless_hid_read
 ## Code Architecture
 
 ### File Naming Convention
-All files use `hid_reader_` prefix after renaming:
+All files use `hid_device_` prefix after renaming:
 ```
-hid_reader.c              # Main app entry, allocation, lifecycle
-hid_reader.h              # Main app struct and types
+hid_device.c              # Main app entry, allocation, lifecycle
+hid_device.h              # Main app struct and types
 helpers/
-  hid_reader_hid.c/h      # USB + Bluetooth HID output
-  hid_reader_nfc.c/h      # NFC reading and NDEF parsing
-  hid_reader_rfid.c/h     # RFID reading
-  hid_reader_scan.c/h     # Scan state machine and modes
-  hid_reader_format.c/h   # UID formatting with delimiter
-  hid_reader_storage.c/h  # Settings persistence
+  hid_device_hid.c/h      # USB + Bluetooth HID output
+  hid_device_nfc.c/h      # NFC reading and NDEF parsing
+  hid_device_rfid.c/h     # RFID reading
+  hid_device_scan.c/h     # Scan state machine and modes
+  hid_device_format.c/h   # UID formatting with delimiter
+  hid_device_storage.c/h  # Settings persistence
 scenes/
-  hid_reader_scene.c/h    # Scene manager
-  hid_reader_scene_home.c # Main scanning screen
-  hid_reader_scene_advanced.c # Settings screen
-  hid_reader_scene_ndef.c # NDEF inspector
+  hid_device_scene.c/h    # Scene manager
+  hid_device_scene_home.c # Main scanning screen
+  hid_device_scene_advanced.c # Settings screen
+  hid_device_scene_ndef.c # NDEF inspector
 views/
-  hid_reader_home_view.c/h # Custom home screen view
+  hid_device_home_view.c/h # Custom home screen view
 ```
 
-### Main App Struct (hid_reader.h)
+### Main App Struct (hid_device.h)
 ```c
 typedef struct {
     // Core Flipper components
@@ -134,10 +134,10 @@ typedef struct {
     // Views and widgets
     Submenu* submenu;
     VariableItemList* variable_item_list;
-    HidReaderHomeView* home_view;
+    HidDeviceHomeView* home_view;
     TextInput* text_input;
 
-    // Reader workers
+    // Device workers
     NfcWorker* nfc_worker;
     LfRfidWorker* rfid_worker;
 
@@ -147,8 +147,8 @@ typedef struct {
     bool usb_hid_connected;
 
     // Scan state
-    HidReaderMode mode;           // Current mode
-    HidReaderScanState scan_state; // State machine
+    HidDeviceMode mode;           // Current mode
+    HidDeviceScanState scan_state; // State machine
     uint8_t nfc_uid[10];
     uint8_t nfc_uid_len;
     uint8_t rfid_uid[8];
@@ -165,31 +165,31 @@ typedef struct {
     // UI state
     char status_text[32];
     char uid_display[64];
-} HidReader;
+} HidDevice;
 
 typedef enum {
-    HidReaderModeNfc,
-    HidReaderModeRfid,
-    HidReaderModeNfcThenRfid,
-    HidReaderModeRfidThenNfc,
-} HidReaderMode;
+    HidDeviceModeNfc,
+    HidDeviceModeRfid,
+    HidDeviceModeNfcThenRfid,
+    HidDeviceModeRfidThenNfc,
+} HidDeviceMode;
 
 typedef enum {
-    HidReaderScanStateIdle,
-    HidReaderScanStateScanning,
-    HidReaderScanStateWaitingSecond,
-    HidReaderScanStateDisplaying,
-    HidReaderScanStateCooldown,
-} HidReaderScanState;
+    HidDeviceScanStateIdle,
+    HidDeviceScanStateScanning,
+    HidDeviceScanStateWaitingSecond,
+    HidDeviceScanStateDisplaying,
+    HidDeviceScanStateCooldown,
+} HidDeviceScanState;
 ```
 
 ### application.fam Updates Required
 ```python
 App(
-    appid="contactless_hid_reader",
-    name="Contactless HID Reader",
+    appid="contactless_hid_device",
+    name="Contactless HID Device",
     apptype=FlipperAppType.EXTERNAL,
-    entry_point="hid_reader_app",
+    entry_point="hid_device_app",
     requires=[
         "gui",
         "storage",
@@ -198,7 +198,7 @@ App(
         "bt",           # Add for Bluetooth HID
     ],
     stack_size=4 * 1024,  # Increase for NFC/RFID workers
-    fap_icon="icons/hid_reader_10px.png",
+    fap_icon="icons/hid_device_10px.png",
     fap_category="NFC",
     fap_version="1.0",
 )

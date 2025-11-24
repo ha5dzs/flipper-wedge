@@ -1,8 +1,8 @@
-#include "hid_reader_haptic.h"
-#include "../hid_reader.h"
+#include "hid_device_haptic.h"
+#include "../hid_device.h"
 
-void hid_reader_play_happy_bump(void* context) {
-    HidReader* app = context;
+void hid_device_play_happy_bump(void* context) {
+    HidDevice* app = context;
     if(app->haptic != 1) {
         return;
     }
@@ -11,8 +11,8 @@ void hid_reader_play_happy_bump(void* context) {
     notification_message(app->notification, &sequence_reset_vibro);
 }
 
-void hid_reader_play_bad_bump(void* context) {
-    HidReader* app = context;
+void hid_device_play_bad_bump(void* context) {
+    HidDevice* app = context;
     if(app->haptic != 1) {
         return;
     }
@@ -21,8 +21,8 @@ void hid_reader_play_bad_bump(void* context) {
     notification_message(app->notification, &sequence_reset_vibro);
 }
 
-void hid_reader_play_long_bump(void* context) {
-    HidReader* app = context;
+void hid_device_play_long_bump(void* context) {
+    HidDevice* app = context;
     if(app->haptic != 1) {
         return;
     }
