@@ -1,0 +1,21 @@
+App(
+    appid="contactless_hid_reader",
+    name="Contactless HID Reader",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="hid_reader_app",
+    cdefines=["APP_HID_READER"],
+    requires=[
+        "gui",
+        "storage",
+        "nfc",
+        "lfrfid",
+        "bt",
+    ],
+    stack_size=4 * 1024,
+    order=10,
+    fap_libs=["ble_profile"],
+    fap_icon="icons/hid_reader_10px.png",
+    fap_icon_assets="icons",
+    fap_category="NFC",
+    fap_version="1.0",
+)
