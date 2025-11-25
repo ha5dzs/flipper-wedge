@@ -35,6 +35,7 @@ typedef enum {
     HidDeviceNfcStateTagDetected,  // Scanner detected tag, need to switch to poller
     HidDeviceNfcStatePolling,
     HidDeviceNfcStateSuccess,
+    HidDeviceNfcStateError,  // Poller failed, need to restart scanner
 } HidDeviceNfcState;
 
 struct HidDeviceNfc {
@@ -565,18 +566,25 @@ static NfcCommand hid_device_nfc_poller_callback_iso14443_3a(NfcGenericEvent eve
     furi_assert(context);
     HidDeviceNfc* instance = context;
 
-    FURI_LOG_D(TAG, "3A callback: protocol=%d", event.protocol);
+    FURI_LOG_I(TAG, "========== ISO14443-3A CALLBACK INVOKED ==========");
+    FURI_LOG_I(TAG, "3A callback: protocol=%d", event.protocol);
 
     if(event.protocol == NfcProtocolIso14443_3a) {
         const Iso14443_3aPollerEvent* iso3a_event = event.event_data;
-        FURI_LOG_D(TAG, "3A event type: %d", iso3a_event->type);
+        FURI_LOG_I(TAG, "3A event type: %d", iso3a_event->type);
 
         if(iso3a_event->type == Iso14443_3aPollerEventTypeReady) {
+            FURI_LOG_I(TAG, "3A poller event: READY - tag is activated");
             const Iso14443_3aData* iso3a_data = nfc_poller_get_data(instance->poller);
+            FURI_LOG_I(TAG, "3A data ptr: %p", (void*)iso3a_data);
+
             if(iso3a_data) {
                 // Validate UID length first
                 uint8_t uid_len = iso3a_data->uid_len;
+                FURI_LOG_I(TAG, "3A UID length from data: %d", uid_len);
+
                 if(uid_len > HID_DEVICE_NFC_UID_MAX_LEN) {
+                    FURI_LOG_W(TAG, "3A UID length %d exceeds max %d, truncating", uid_len, HID_DEVICE_NFC_UID_MAX_LEN);
                     uid_len = HID_DEVICE_NFC_UID_MAX_LEN;
                 }
                 if(uid_len > 0) {
@@ -594,16 +602,25 @@ static NfcCommand hid_device_nfc_poller_callback_iso14443_3a(NfcGenericEvent eve
                         FURI_LOG_I(TAG, "Got ISO14443-3A UID, len: %d", instance->last_data.uid_len);
                     }
                     instance->state = HidDeviceNfcStateSuccess;
-
-                    // Signal the owner thread that we have data
-                    // The callback will be invoked from the main thread via polling
+                } else {
+                    FURI_LOG_E(TAG, "3A UID length is 0, cannot proceed");
+                    instance->state = HidDeviceNfcStateError;
                 }
+            } else {
+                FURI_LOG_E(TAG, "3A poller returned NULL data");
+                instance->state = HidDeviceNfcStateError;
             }
             return NfcCommandStop;
         } else if(iso3a_event->type == Iso14443_3aPollerEventTypeError) {
-            FURI_LOG_E(TAG, "3A poller error");
+            FURI_LOG_E(TAG, "3A poller event: ERROR - activation or communication failed");
+            FURI_LOG_E(TAG, "3A error: Check if tag is still present and properly positioned");
+            instance->state = HidDeviceNfcStateError;
             return NfcCommandStop;
+        } else {
+            FURI_LOG_W(TAG, "3A poller event: UNKNOWN type %d", iso3a_event->type);
         }
+    } else {
+        FURI_LOG_W(TAG, "3A callback received unexpected protocol: %d", event.protocol);
     }
     return NfcCommandContinue;
 }
@@ -672,13 +689,16 @@ static NfcCommand hid_device_nfc_poller_callback_iso14443_4a(NfcGenericEvent eve
                     }
                 } else {
                     FURI_LOG_E(TAG, "4A data has NULL 3A pointer");
+                    instance->state = HidDeviceNfcStateError;
                 }
             } else {
                 FURI_LOG_E(TAG, "4A poller returned NULL data");
+                instance->state = HidDeviceNfcStateError;
             }
             return NfcCommandStop;
         } else if(iso4a_event->type == Iso14443_4aPollerEventTypeError) {
             FURI_LOG_E(TAG, "4A poller error");
+            instance->state = HidDeviceNfcStateError;
             return NfcCommandStop;
         }
     } else if(event.protocol == NfcProtocolIso14443_3a) {
@@ -692,21 +712,31 @@ static NfcCommand hid_device_nfc_poller_callback_mf_ultralight(NfcGenericEvent e
     furi_assert(context);
     HidDeviceNfc* instance = context;
 
-    FURI_LOG_D(TAG, "MF Ultralight callback: protocol=%d", event.protocol);
+    FURI_LOG_I(TAG, "========== MF ULTRALIGHT CALLBACK INVOKED ==========");
+    FURI_LOG_I(TAG, "MF Ultralight callback: protocol=%d, parse_ndef=%d", event.protocol, instance->parse_ndef);
 
     if(event.protocol == NfcProtocolMfUltralight) {
         const MfUltralightPollerEvent* mfu_event = event.event_data;
-        FURI_LOG_D(TAG, "MFU event type: %d", mfu_event->type);
+        FURI_LOG_I(TAG, "MFU event type: %d", mfu_event->type);
 
         if(mfu_event->type == MfUltralightPollerEventTypeReadSuccess) {
+            FURI_LOG_I(TAG, "MFU poller event: READ SUCCESS");
             // Successfully read the tag
             const MfUltralightData* mfu_data = nfc_poller_get_data(instance->poller);
+            FURI_LOG_I(TAG, "MFU data ptr: %p", (void*)mfu_data);
+
             if(mfu_data) {
+                FURI_LOG_I(TAG, "MFU pages_read: %d", mfu_data->pages_read);
                 // Get UID from ISO14443-3A base data
                 const Iso14443_3aData* iso3a_data = mfu_data->iso14443_3a_data;
+                FURI_LOG_I(TAG, "MFU 3A data ptr: %p", (void*)iso3a_data);
+
                 if(iso3a_data) {
                     uint8_t uid_len = iso3a_data->uid_len;
+                    FURI_LOG_I(TAG, "MFU UID length: %d", uid_len);
+
                     if(uid_len > HID_DEVICE_NFC_UID_MAX_LEN) {
+                        FURI_LOG_W(TAG, "MFU UID length %d exceeds max, truncating", uid_len);
                         uid_len = HID_DEVICE_NFC_UID_MAX_LEN;
                     }
                     if(uid_len > 0) {
@@ -728,7 +758,7 @@ static NfcCommand hid_device_nfc_poller_callback_mf_ultralight(NfcGenericEvent e
 
                             const uint8_t* ndef_data = &mfu_data->page[4].data[0];
 
-                            FURI_LOG_D(TAG, "Attempting NDEF parse, data_len=%zu, pages_read=%d",
+                            FURI_LOG_I(TAG, "Attempting NDEF parse, data_len=%zu, pages_read=%d",
                                       ndef_data_len, mfu_data->pages_read);
 
                             size_t text_len = hid_device_nfc_parse_ndef_text(
@@ -744,28 +774,45 @@ static NfcCommand hid_device_nfc_poller_callback_mf_ultralight(NfcGenericEvent e
                             } else {
                                 // Type 2 tag but no NDEF text record found
                                 instance->last_data.error = HidDeviceNfcErrorNoTextRecord;
-                                FURI_LOG_D(TAG, "No NDEF text records found on Type 2 tag");
+                                FURI_LOG_I(TAG, "No NDEF text records found on Type 2 tag");
                             }
                         } else if(instance->parse_ndef) {
                             // Not enough pages read for NDEF
                             instance->last_data.error = HidDeviceNfcErrorNoTextRecord;
-                            FURI_LOG_D(TAG, "Not enough pages for NDEF (pages_read=%d)", mfu_data->pages_read);
+                            FURI_LOG_I(TAG, "Not enough pages for NDEF (pages_read=%d)", mfu_data->pages_read);
+                        } else {
+                            FURI_LOG_I(TAG, "NDEF parsing not requested (parse_ndef=false)");
                         }
 
                         instance->state = HidDeviceNfcStateSuccess;
+                    } else {
+                        FURI_LOG_E(TAG, "MFU UID length is 0");
+                        instance->state = HidDeviceNfcStateError;
                     }
+                } else {
+                    FURI_LOG_E(TAG, "MFU data has NULL 3A pointer");
+                    instance->state = HidDeviceNfcStateError;
                 }
+            } else {
+                FURI_LOG_E(TAG, "MFU poller returned NULL data");
+                instance->state = HidDeviceNfcStateError;
             }
             return NfcCommandStop;
         } else if(mfu_event->type == MfUltralightPollerEventTypeReadFailed) {
-            FURI_LOG_E(TAG, "MFU poller read failed");
+            FURI_LOG_E(TAG, "MFU poller event: READ FAILED");
+            FURI_LOG_E(TAG, "MFU read failed - tag may have been removed or communication error occurred");
+            instance->state = HidDeviceNfcStateError;
             return NfcCommandStop;
         } else if(mfu_event->type == MfUltralightPollerEventTypeRequestMode) {
             // Set read mode
             mfu_event->data->poller_mode = MfUltralightPollerModeRead;
-            FURI_LOG_D(TAG, "MFU poller set to read mode");
+            FURI_LOG_I(TAG, "MFU poller event: REQUEST MODE - set to read mode");
             return NfcCommandContinue;
+        } else {
+            FURI_LOG_W(TAG, "MFU poller event: UNKNOWN type %d", mfu_event->type);
         }
+    } else {
+        FURI_LOG_W(TAG, "MFU callback received unexpected protocol: %d", event.protocol);
     }
     return NfcCommandContinue;
 }
@@ -852,10 +899,14 @@ static NfcCommand hid_device_nfc_poller_callback_iso15693(NfcGenericEvent event,
                 }
 
                 instance->state = HidDeviceNfcStateSuccess;
+            } else {
+                FURI_LOG_E(TAG, "ISO15693 poller returned NULL data");
+                instance->state = HidDeviceNfcStateError;
             }
             return NfcCommandStop;
         } else if(iso15_event->type == Iso15693_3PollerEventTypeError) {
             FURI_LOG_E(TAG, "ISO15693 poller error");
+            instance->state = HidDeviceNfcStateError;
             return NfcCommandStop;
         }
     }
@@ -1100,7 +1151,8 @@ bool hid_device_nfc_is_scanning(HidDeviceNfc* instance) {
     furi_assert(instance);
     return instance->state == HidDeviceNfcStateScanning ||
            instance->state == HidDeviceNfcStateTagDetected ||
-           instance->state == HidDeviceNfcStatePolling;
+           instance->state == HidDeviceNfcStatePolling ||
+           instance->state == HidDeviceNfcStateError;  // Still scanning during error recovery
 }
 
 // Call this from the main thread's tick handler to process NFC events
@@ -1112,6 +1164,30 @@ bool hid_device_nfc_tick(HidDeviceNfc* instance) {
         // Scanner detected a tag, switch to poller (safe to do from main thread)
         FURI_LOG_I(TAG, "Tick: starting poller for detected tag, protocol=%d", instance->detected_protocol);
         hid_device_nfc_start_poller(instance);
+        return false;
+    }
+
+    if(instance->state == HidDeviceNfcStateError) {
+        // Poller failed, recover by restarting scanner
+        FURI_LOG_I(TAG, "Tick: poller error detected, recovering...");
+
+        // Stop and free the failed poller
+        if(instance->poller) {
+            FURI_LOG_D(TAG, "Tick: stopping failed poller");
+            nfc_poller_stop(instance->poller);
+            nfc_poller_free(instance->poller);
+            instance->poller = NULL;
+        }
+
+        // Restart the scanner
+        FURI_LOG_I(TAG, "Tick: restarting scanner after error");
+        instance->scanner = nfc_scanner_alloc(instance->nfc);
+        nfc_scanner_start(instance->scanner, hid_device_nfc_scanner_callback, instance);
+
+        // Transition back to scanning state
+        instance->state = HidDeviceNfcStateScanning;
+        instance->detected_protocol = NfcProtocolInvalid;
+        FURI_LOG_I(TAG, "Tick: error recovery complete, scanning resumed");
         return false;
     }
 
