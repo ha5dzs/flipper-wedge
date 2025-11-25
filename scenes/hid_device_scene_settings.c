@@ -115,6 +115,9 @@ void hid_device_scene_settings_on_enter(void* context) {
     HidDevice* app = context;
     VariableItem* item;
 
+    // Keep display backlight on while in settings
+    notification_message(app->notification, &sequence_display_backlight_enforce_on);
+
     // Header with branding (non-interactive)
     item = variable_item_list_add(
         app->variable_item_list,
@@ -215,4 +218,7 @@ void hid_device_scene_settings_on_exit(void* context) {
     HidDevice* app = context;
     variable_item_list_set_selected_item(app->variable_item_list, 0);
     variable_item_list_reset(app->variable_item_list);
+
+    // Return backlight to auto mode
+    notification_message(app->notification, &sequence_display_backlight_enforce_auto);
 }

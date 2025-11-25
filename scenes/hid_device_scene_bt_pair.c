@@ -42,7 +42,7 @@ static void hid_device_scene_bt_pair_rebuild_widget(HidDevice* app, Widget* widg
         AlignLeft,
         AlignTop,
         FontSecondary,
-        "2. Select 'Flipper [name]'");
+        "2. Select 'HID-[name]'");
 
     // Connection status
     bool bt_connected = hid_device_hid_is_bt_connected(app->hid);
@@ -69,6 +69,9 @@ static void hid_device_scene_bt_pair_rebuild_widget(HidDevice* app, Widget* widg
 
 void hid_device_scene_bt_pair_on_enter(void* context) {
     HidDevice* app = context;
+
+    // Keep display backlight on while pairing
+    notification_message(app->notification, &sequence_display_backlight_enforce_on);
 
     // Allocate scene context
     BtPairSceneContext* scene_ctx = malloc(sizeof(BtPairSceneContext));
@@ -127,4 +130,7 @@ void hid_device_scene_bt_pair_on_exit(void* context) {
     }
 
     scene_manager_set_scene_state(app->scene_manager, HidDeviceSceneBtPair, 0);
+
+    // Return backlight to auto mode
+    notification_message(app->notification, &sequence_display_backlight_enforce_auto);
 }

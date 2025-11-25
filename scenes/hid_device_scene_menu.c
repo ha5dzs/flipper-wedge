@@ -12,6 +12,9 @@ void hid_device_scene_menu_submenu_callback(void* context, uint32_t index) {
 void hid_device_scene_menu_on_enter(void* context) {
     HidDevice* app = context;
 
+    // Keep display backlight on while in menu
+    notification_message(app->notification, &sequence_display_backlight_enforce_on);
+
     submenu_add_item(
         app->submenu,
         "Settings",
@@ -47,4 +50,7 @@ bool hid_device_scene_menu_on_event(void* context, SceneManagerEvent event) {
 void hid_device_scene_menu_on_exit(void* context) {
     HidDevice* app = context;
     submenu_reset(app->submenu);
+
+    // Return backlight to auto mode
+    notification_message(app->notification, &sequence_display_backlight_enforce_auto);
 }

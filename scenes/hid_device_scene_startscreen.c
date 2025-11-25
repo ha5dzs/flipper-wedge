@@ -53,9 +53,10 @@ static void hid_device_scene_startscreen_display_timer_callback(void* context) {
             hid_device_startscreen_set_status_text(app->hid_device_startscreen, "");
             furi_timer_start(app->display_timer, furi_ms_to_ticks(300));
         } else {
-            // For success, show "Sent"
+            // For success, show "Sent" with vibration feedback
             hid_device_startscreen_set_display_state(app->hid_device_startscreen, HidDeviceDisplayStateSent);
             hid_device_startscreen_set_status_text(app->hid_device_startscreen, "Sent");
+            hid_device_play_happy_bump(app);  // Vibrate when "Sent" is displayed
             furi_timer_start(app->display_timer, furi_ms_to_ticks(200));
         }
     } else if(current_state == HidDeviceDisplayStateSent) {
@@ -160,8 +161,7 @@ static void hid_device_scene_startscreen_output_and_reset(HidDevice* app) {
         }
     }
 
-    // Haptic and LED feedback
-    hid_device_play_happy_bump(app);
+    // LED feedback (haptic happens later when "Sent" is displayed)
     hid_device_led_set_rgb(app, 0, 255, 0);  // Green flash
 
     // Start display timer to show result, then "Sent", then cooldown (non-blocking)
@@ -255,6 +255,9 @@ void hid_device_scene_startscreen_on_enter(void* context) {
 
     // Update HID connection status
     hid_device_scene_startscreen_update_status(app);
+
+    // Keep display backlight on while using the app
+    notification_message(app->notification, &sequence_display_backlight_enforce_on);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, HidDeviceViewIdStartscreen);
 
@@ -444,4 +447,7 @@ void hid_device_scene_startscreen_on_exit(void* context) {
     if(app->display_timer) {
         furi_timer_stop(app->display_timer);
     }
+
+    // Return backlight to auto mode
+    notification_message(app->notification, &sequence_display_backlight_enforce_auto);
 }
